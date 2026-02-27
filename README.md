@@ -56,7 +56,7 @@ Save folder behavior:
 
 ## 🖼️ UI example
 
-![Screenux editor UI example](docs/images/ui-example.png)
+<img width="730" height="660" alt="image" src="https://github.com/user-attachments/assets/e7bf2baa-afe9-48a8-a84d-4f7126fde637" />
 
 ## 🛠️ Development
 
