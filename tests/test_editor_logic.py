@@ -136,6 +136,7 @@ class FakeEditorSelf:
         self._on_mid_pan_update = lambda gesture, offset_x, offset_y: editor.AnnotationEditor._on_mid_pan_update(self, gesture, offset_x, offset_y)
         self._set_select_tool = lambda: editor.AnnotationEditor._set_select_tool(self)
         self._render_output_surface = lambda: editor.AnnotationEditor._render_output_surface(self)
+        self._update_draw_cursor = lambda: None
 
     def append(self, *_):
         pass
