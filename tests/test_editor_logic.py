@@ -115,11 +115,15 @@ class FakeEditorSelf:
         self._pan_start_values = None
         self._base_scale = 1.0
         self._zoom = 1.0
+        self._zoom_mode = "best-fit"
         self._scale = 1.0
         self._offset_x = 0.0
         self._offset_y = 0.0
         self._pan_x = 0.0
         self._pan_y = 0.0
+        self._zoom_label_text = "100%"
+        self._zoom_label = SimpleNamespace(set_text=lambda text: setattr(self, "_zoom_label_text", text))
+        self._zoom_preset_buttons = {}
         self._surface = FakeSurface()
         self._source_uri = "file:///tmp/source.png"
         self._build_output_path = lambda _uri: Path(f"/tmp/out_{id(self)}.png")
@@ -451,10 +455,12 @@ def test_editor_popover_scroll_zoom_save(monkeypatch):
     editor.AnnotationEditor._on_scroll(self, ctrl_none, 0, 1)
 
     # zoom
-    self._zoom = 3.9
+    self._zoom = 19.9
     editor.AnnotationEditor._on_zoom_in(self, None)
+    assert self._zoom == 20.0
     self._zoom = 0.2
     editor.AnnotationEditor._on_zoom_out(self, None)
+    assert self._zoom == 0.33
 
     # save
     rendered = []
@@ -507,3 +513,36 @@ def test_editor_save_failure_reports_error(monkeypatch):
     editor.AnnotationEditor._do_save(self)
 
     assert self.error == "could not save image (disk full)"
+
+
+def test_zoom_presets_and_best_fit_state():
+    self = FakeEditorSelf()
+
+    class Toggle:
+        def __init__(self):
+            self.active = False
+
+        def set_active(self, state):
+            self.active = state
+
+    best_fit = Toggle()
+    preset_133 = Toggle()
+    self._zoom_preset_buttons = {"best-fit": best_fit, 1.33: preset_133}
+
+    editor.AnnotationEditor._sync_zoom_controls(self)
+    assert self._zoom_label_text == "100%"
+    assert best_fit.active is True
+
+    editor.AnnotationEditor._on_zoom_preset(self, None, 1.33)
+    assert self._zoom == 1.33
+    assert self._zoom_mode == "manual"
+    assert self._zoom_label_text == "133%"
+    assert preset_133.active is True
+
+    self._pan_x = 20
+    self._pan_y = 10
+    editor.AnnotationEditor._on_zoom_best_fit(self, None)
+    assert self._zoom == 1.0
+    assert self._zoom_mode == "best-fit"
+    assert self._pan_x == 0.0 and self._pan_y == 0.0
+    assert self._zoom_label_text == "100%"

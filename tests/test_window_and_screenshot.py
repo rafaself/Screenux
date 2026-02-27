@@ -93,6 +93,16 @@ class FakeWindowSelf:
         self._set_child_value = child
 
 
+def test_window_take_screenshot_public_method():
+    self = FakeWindowSelf()
+    called = []
+    self._on_take_screenshot = lambda button: called.append(button)
+
+    window.MainWindow.take_screenshot(self)
+
+    assert called == [self._button]
+
+
 class DummyError(Exception):
     def __init__(self, message):
         self.message = message
@@ -384,8 +394,14 @@ def test_screenshot_main_and_extension_helpers(monkeypatch, capsys, tmp_path):
     assert screenshot.main(["app"]) == 1
     assert "Missing GTK4/PyGObject dependencies" in capsys.readouterr().err
 
+    seen = {}
+
     class App:
+        def __init__(self, auto_capture=False):
+            seen["auto_capture"] = auto_capture
+
         def run(self, argv):
+            seen["argv"] = argv
             return len(argv)
 
     monkeypatch.setattr(screenshot, "GI_IMPORT_ERROR", None)
@@ -393,6 +409,11 @@ def test_screenshot_main_and_extension_helpers(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(screenshot, "MainWindow", object())
     monkeypatch.setattr(screenshot, "ScreenuxScreenshotApp", App)
     assert screenshot.main(["a", "b"]) == 2
+    assert seen == {"auto_capture": False, "argv": ["a", "b"]}
+
+    seen.clear()
+    assert screenshot.main(["a", "--capture"]) == 1
+    assert seen == {"auto_capture": True, "argv": ["a"]}
 
     class FakeGLib:
         @staticmethod

@@ -22,8 +22,26 @@ except Exception as exc:  # pragma: no cover - handled at runtime
     Gtk = None  # type: ignore[assignment]  # pragma: no cover
 
 APP_ID = "io.github.rafa.ScreenuxScreenshot"
+LIGHT_ICON_NAME = f"{APP_ID}-light"
+DARK_ICON_NAME = f"{APP_ID}-dark"
 _MAX_CONFIG_SIZE = 64 * 1024
 _ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
+
+
+def _prefers_dark_theme() -> bool:
+    if Gtk is None:
+        return False
+    settings = Gtk.Settings.get_default()
+    if settings is None:
+        return False
+    try:
+        return bool(settings.get_property("gtk-application-prefer-dark-theme"))
+    except Exception:
+        return False
+
+
+def select_icon_name() -> str:
+    return DARK_ICON_NAME if _prefers_dark_theme() else LIGHT_ICON_NAME
 
 
 def enforce_offline_mode() -> None:
@@ -139,6 +157,17 @@ def format_status_saved(path: Path) -> str:
     return f"Saved: {path}"
 
 
+def _parse_cli_args(argv: list[str]) -> tuple[list[str], bool]:
+    filtered = [argv[0]] if argv else []
+    auto_capture = False
+    for arg in argv[1:]:
+        if arg == "--capture":
+            auto_capture = True
+            continue
+        filtered.append(arg)
+    return filtered, auto_capture
+
+
 MainWindow = None
 if Gtk is not None:
     try:
@@ -149,21 +178,34 @@ if Gtk is not None:
 
 if Gtk is not None:
     class ScreenuxScreenshotApp(Gtk.Application):  # type: ignore[misc]
-        def __init__(self) -> None:
+        def __init__(self, auto_capture: bool = False) -> None:
             super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
+            self._auto_capture_pending = auto_capture
+
+        def _trigger_auto_capture(self, window: MainWindow) -> bool:
+            window.take_screenshot()
+            return False
 
         def do_activate(self) -> None:
+            icon_name = select_icon_name()
+            Gtk.Window.set_default_icon_name(icon_name)
             window = self.props.active_window
             if window is None:
                 window = MainWindow(
                     self,
+                    icon_name=icon_name,
                     resolve_save_dir=resolve_save_dir,
                     load_config=load_config,
                     save_config=save_config,
                     build_output_path=build_output_path,
                     format_status_saved=format_status_saved,
                 )
+            else:
+                window.set_icon_name(icon_name)
             window.present()
+            if self._auto_capture_pending:
+                self._auto_capture_pending = False
+                GLib.idle_add(self._trigger_auto_capture, window)
 else:
     class ScreenuxScreenshotApp:  # pragma: no cover
         def run(self, _argv: list[str]) -> int:
@@ -175,8 +217,9 @@ def main(argv: list[str]) -> int:
     if GI_IMPORT_ERROR is not None or Gtk is None or MainWindow is None:
         print(f"Missing GTK4/PyGObject dependencies: {GI_IMPORT_ERROR}", file=sys.stderr)
         return 1
-    app = ScreenuxScreenshotApp()
-    return app.run(argv)
+    app_argv, auto_capture = _parse_cli_args(argv)
+    app = ScreenuxScreenshotApp(auto_capture=auto_capture)
+    return app.run(app_argv)
 
 
 if __name__ == "__main__":

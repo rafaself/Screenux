@@ -17,6 +17,75 @@ permissions:
   contents: read
 
 jobs:
+  script-security-integrity:
+    name: Script Security & Integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shell tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck shfmt
+
+      - name: ShellCheck (static analysis)
+        run: |
+          mapfile -t script_files < <(git ls-files '*.sh')
+          [[ ${#script_files[@]} -gt 0 ]] || { echo "No shell scripts found."; exit 0; }
+          shellcheck -x "${script_files[@]}"
+
+      - name: shfmt (format enforcement)
+        run: |
+          mapfile -t script_files < <(git ls-files '*.sh')
+          [[ ${#script_files[@]} -gt 0 ]] || { echo "No shell scripts found."; exit 0; }
+          shfmt -d -i 2 -ci -sr "${script_files[@]}"
+
+      - name: Policy checks (high-risk patterns)
+        run: |
+          set -euo pipefail
+
+          mapfile -t script_files < <(git ls-files '*.sh')
+          [[ ${#script_files[@]} -gt 0 ]] || { echo "No shell scripts found."; exit 0; }
+
+          fail=0
+
+          check_forbidden_pattern() {
+            local label="$1"
+            local regex="$2"
+            if grep -RInE -- "${regex}" "${script_files[@]}"; then
+              echo "::error::Forbidden pattern detected (${label})"
+              fail=1
+            fi
+          }
+
+          check_forbidden_pattern "curl pipe to shell" '(^|[;&|[:space:]])curl([^\n]|\\\n)*\|[[:space:]]*(ba)?sh([[:space:]]|$)'
+          check_forbidden_pattern "wget pipe to shell" '(^|[;&|[:space:]])wget([^\n]|\\\n)*\|[[:space:]]*(ba)?sh([[:space:]]|$)'
+          check_forbidden_pattern "sudo usage in scripts" '^[[:space:]]*sudo[[:space:]]+'
+
+          if grep -RInE -- '(^|[;&|[:space:]])(curl|wget)[[:space:]][^#\n]*(http|https)://' "${script_files[@]}"; then
+            echo "::error::Potential unpinned remote download detected (curl/wget URL usage)."
+            fail=1
+          fi
+
+          if [[ "${fail}" -ne 0 ]]; then
+            echo "Policy checks failed. Remove forbidden patterns or harden download verification."
+            exit 1
+          fi
+
+      - name: Generate installer SHA256 checksum
+        run: |
+          mkdir -p artifacts
+          sha256sum scripts/install/install-screenux.sh > artifacts/install-screenux.sh.sha256
+
+      - name: Upload checksum artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-screenux-sha256
+          path: artifacts/install-screenux.sh.sha256
+
   quality-and-security:
     name: Quality & Security
     runs-on: ubuntu-latest

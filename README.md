@@ -16,28 +16,53 @@ Screenux focuses on a clean capture flow: take a screenshot, optionally annotate
 - Capture with `Take Screenshot`
 - Status updates: `Ready`, `Capturing...`, `Saved: <path>`, `Cancelled`, `Failed: <reason>`
 - Built-in editor for quick annotations (shapes/text)
+- Editor zoom controls with `Best fit` and quick presets (`33%` to `2000%`)
 - Timestamped output names with safe, non-overwriting writes
+- Packaged app icon for desktop launcher integration
 
-## 🚀 Quick start
-
-### 1) Install system dependencies
-
-- `python3`
-- `python3-gi`
-- GTK4 introspection (`gir1.2-gtk-4.0` on Debian/Ubuntu)
-- `xdg-desktop-portal` plus a desktop backend (GNOME/KDE/etc.)
-
-### 2) Clone the project
+## Install
 
 ```bash
-git clone https://github.com/rafaself/Screenux.git
-cd Screenux
+./install-screenux.sh --bundle /path/to/screenux-screenshot.flatpak
 ```
 
-### 3) Run Screenux
+The installer creates a desktop entry and installs app icons at `~/.local/share/icons/hicolor/scalable/apps/` so launcher/taskbar icon lookup works reliably. It includes theme variants (`io.github.rafa.ScreenuxScreenshot-light.svg` and `io.github.rafa.ScreenuxScreenshot-dark.svg`) and refreshes the local icon cache when GTK cache tools are available.
+
+Optional GNOME Print Screen shortcut:
 
 ```bash
-./screenux-screenshot
+./install-screenux.sh --bundle /path/to/screenux-screenshot.flatpak --print-screen
+```
+
+This maps `Print` to `screenux-screenshot --capture`, which opens Screenux and immediately starts the capture flow.
+
+If Screenux is already installed for your user, you can rerun:
+
+```bash
+./install-screenux.sh
+```
+
+Optional global CLI command (`screenux`):
+
+```bash
+sudo tee /usr/local/bin/screenux >/dev/null <<'EOF'
+#!/usr/bin/env bash
+
+/home/${USER}/dev/Screenux/screenux-screenshot
+EOF
+sudo chmod +x /usr/local/bin/screenux
+```
+
+## Uninstall
+
+```bash
+./uninstall-screenux.sh
+```
+
+Preserve app data in `~/.var/app/io.github.rafa.ScreenuxScreenshot`:
+
+```bash
+./uninstall-screenux.sh --preserve-user-data
 ```
 
 ## 🖱️ Usage
@@ -112,6 +137,7 @@ Quality gates include:
 - Compile validation (`python -m compileall -q src`)
 - Automated tests (`pytest -q`)
 - Security checks (`bandit`, `pip-audit`)
+- Shell script hardening (`ShellCheck`, `shfmt`, policy checks, installer SHA256 artifact)
 - Dependency checks (`pip check`, dependency review action)
 - Build/package validation (launcher, Flatpak manifest, desktop entry, Docker Compose, Docker build)
 
@@ -150,6 +176,33 @@ Notes:
 
 ### Flatpak
 
+Requirements:
+
+- `flatpak`
+- `flatpak-builder`
+
+Install tools (examples):
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install -y flatpak flatpak-builder
+
+# Fedora
+sudo dnf install -y flatpak flatpak-builder
+
+# Arch
+sudo pacman -S --needed flatpak flatpak-builder
+```
+
+Build a local bundle and install with Print Screen mapping:
+
+```bash
+make build-flatpak-bundle FLATPAK_BUNDLE=./screenux-screenshot.flatpak
+make install-print-screen BUNDLE=./screenux-screenshot.flatpak
+```
+
+`make build-flatpak-bundle` now auto-checks Flatpak build deps and, when missing, installs `org.gnome.Platform//47` and `org.gnome.Sdk//47` from Flathub in user scope.
+
 ```bash
 flatpak-builder --force-clean build-dir flatpak/io.github.rafa.ScreenuxScreenshot.json
 flatpak-builder --run build-dir flatpak/io.github.rafa.ScreenuxScreenshot.json screenux-screenshot
@@ -163,3 +216,11 @@ Flatpak permissions stay intentionally narrow (portal access + Desktop filesyste
 - Screenshot sources are validated as local, readable `file://` URIs.
 - Config parsing is defensive (invalid/non-object/oversized files are ignored).
 - Save operations use exclusive file creation to avoid accidental overwrite.
+
+## 🤝 Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow and PR guidance.
+
+## 📄 License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE).

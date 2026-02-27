@@ -22,6 +22,11 @@ Annotation = dict[str, Any]
 
 _SELECTION_COLOR = (0.2, 0.5, 1.0, 0.8)
 _HANDLE_SIZE = 6.0
+_ZOOM_MIN = 0.33
+_ZOOM_MAX = 20.0
+_ZOOM_BUTTON_STEP = 1.25
+_ZOOM_SCROLL_STEP = 1.15
+_ZOOM_PRESETS = (0.33, 0.5, 1.0, 1.33, 2.0, 5.0, 10.0, 15.0, 20.0)
 
 
 def load_image_surface(file_path: str):
@@ -206,11 +211,14 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
 
         self._base_scale = 1.0
         self._zoom = 1.0
+        self._zoom_mode = "best-fit"
         self._scale = 1.0
         self._offset_x = 0.0
         self._offset_y = 0.0
         self._pan_x = 0.0
         self._pan_y = 0.0
+        self._zoom_preset_buttons: dict[Any, Gtk.CheckButton] = {}
+        self._syncing_zoom_controls = False
 
         self._build_toolbar()
         self._build_canvas()
@@ -313,10 +321,44 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         zoom_out_btn.connect("clicked", self._on_zoom_out)
         toolbar.append(zoom_out_btn)
 
+        self._zoom_menu_btn = Gtk.MenuButton()
+        self._zoom_menu_btn.set_tooltip_text("Zoom")
+
+        zoom_btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self._zoom_label = Gtk.Label(label="100%")
+        zoom_btn_box.append(self._zoom_label)
+        zoom_btn_box.append(Gtk.Image.new_from_icon_name("pan-down-symbolic"))
+        self._zoom_menu_btn.set_child(zoom_btn_box)
+
+        zoom_popover = Gtk.Popover()
+        zoom_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        zoom_list.set_margin_start(8)
+        zoom_list.set_margin_end(8)
+        zoom_list.set_margin_top(8)
+        zoom_list.set_margin_bottom(8)
+
+        best_fit_btn = Gtk.CheckButton(label="Best fit")
+        best_fit_btn.connect("toggled", self._on_zoom_best_fit_toggled)
+        zoom_list.append(best_fit_btn)
+        self._zoom_preset_buttons["best-fit"] = best_fit_btn
+
+        for preset in _ZOOM_PRESETS:
+            preset_btn = Gtk.CheckButton(label=f"{int(round(preset * 100))}%")
+            preset_btn.set_group(best_fit_btn)
+            preset_btn.connect("toggled", self._on_zoom_preset_toggled, preset)
+            zoom_list.append(preset_btn)
+            self._zoom_preset_buttons[preset] = preset_btn
+
+        zoom_popover.set_child(zoom_list)
+        self._zoom_menu_btn.set_popover(zoom_popover)
+        toolbar.append(self._zoom_menu_btn)
+
         zoom_in_btn = Gtk.Button.new_from_icon_name("zoom-in-symbolic")
         zoom_in_btn.set_tooltip_text("Zoom In")
         zoom_in_btn.connect("clicked", self._on_zoom_in)
         toolbar.append(zoom_in_btn)
+
+        AnnotationEditor._sync_zoom_controls(self)
 
         self.append(toolbar)
 
@@ -753,11 +795,8 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         state = ctrl.get_current_event_state()
 
         if state & Gdk.ModifierType.CONTROL_MASK:
-            factor = 1.15 if dy < 0 else (1 / 1.15)
-            new_zoom = max(0.25, min(4.0, self._zoom * factor))
-            if new_zoom != self._zoom:
-                self._zoom = new_zoom
-            self._drawing_area.queue_draw()
+            factor = _ZOOM_SCROLL_STEP if dy < 0 else (1 / _ZOOM_SCROLL_STEP)
+            AnnotationEditor._set_zoom(self, self._zoom * factor, mode="manual")
             return True
 
         if state & Gdk.ModifierType.SHIFT_MASK:
@@ -769,13 +808,66 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         self._drawing_area.queue_draw()
         return True
 
-    def _on_zoom_in(self, _btn) -> None:
-        self._zoom = min(4.0, self._zoom * 1.25)
+    def _clamp_zoom(self, zoom: float) -> float:
+        return max(_ZOOM_MIN, min(_ZOOM_MAX, zoom))
+
+    def _zoom_text(self, zoom: float) -> str:
+        return f"{int(round(zoom * 100))}%"
+
+    def _sync_zoom_controls(self) -> None:
+        if hasattr(self, "_zoom_label"):
+            self._zoom_label.set_text(AnnotationEditor._zoom_text(self, self._zoom))
+
+        zoom_buttons = getattr(self, "_zoom_preset_buttons", None)
+        if not zoom_buttons or getattr(self, "_syncing_zoom_controls", False):
+            return
+
+        selected: Any = None
+        if self._zoom_mode == "best-fit":
+            selected = "best-fit"
+        else:
+            for preset in _ZOOM_PRESETS:
+                if abs(self._zoom - preset) < 0.001:
+                    selected = preset
+                    break
+
+        self._syncing_zoom_controls = True
+        try:
+            for key, btn in zoom_buttons.items():
+                btn.set_active(key == selected)
+        finally:
+            self._syncing_zoom_controls = False
+
+    def _set_zoom(self, zoom: float, mode: str = "manual", reset_pan: bool = False) -> None:
+        self._zoom = AnnotationEditor._clamp_zoom(self, zoom)
+        self._zoom_mode = mode
+        if reset_pan:
+            self._pan_x = 0.0
+            self._pan_y = 0.0
+        AnnotationEditor._sync_zoom_controls(self)
         self._drawing_area.queue_draw()
 
+    def _on_zoom_best_fit_toggled(self, button: Gtk.CheckButton) -> None:
+        if getattr(self, "_syncing_zoom_controls", False) or not button.get_active():
+            return
+        AnnotationEditor._on_zoom_best_fit(self, button)
+
+    def _on_zoom_preset_toggled(self, button: Gtk.CheckButton, preset: float) -> None:
+        if getattr(self, "_syncing_zoom_controls", False) or not button.get_active():
+            return
+        AnnotationEditor._on_zoom_preset(self, button, preset)
+
+    def _on_zoom_best_fit(self, _btn) -> None:
+        AnnotationEditor._set_zoom(self, 1.0, mode="best-fit", reset_pan=True)
+
+    def _on_zoom_preset(self, _btn, preset: float) -> None:
+        AnnotationEditor._set_zoom(self, preset, mode="manual")
+
+    def _on_zoom_in(self, _btn) -> None:
+        AnnotationEditor._set_zoom(self, self._zoom * _ZOOM_BUTTON_STEP, mode="manual")
+
     def _on_zoom_out(self, _btn) -> None:
-        self._zoom = max(0.25, self._zoom / 1.25)
-        self._drawing_area.queue_draw()
+        AnnotationEditor._set_zoom(self, self._zoom / _ZOOM_BUTTON_STEP, mode="manual")
 
     def _do_save(self) -> None:
         try:
