@@ -8,8 +8,13 @@ FLATPAK_BUILD_DIR ?= build-dir
 FLATPAK_REPO_DIR ?= repo
 FLATPAK_BUNDLE ?= ./screenux-screenshot.flatpak
 BUNDLE ?= $(FLATPAK_BUNDLE)
+FLATPAK_REMOTE ?= flathub
+FLATPAK_REMOTE_URL ?= https://flathub.org/repo/flathub.flatpakrepo
+FLATPAK_RUNTIME_VERSION ?= 47
+FLATPAK_PLATFORM_REF ?= org.gnome.Platform//$(FLATPAK_RUNTIME_VERSION)
+FLATPAK_SDK_REF ?= org.gnome.Sdk//$(FLATPAK_RUNTIME_VERSION)
 
-.PHONY: help build-flatpak-bundle install install-flatpak install-print-screen restore-native-print check-install-scripts
+.PHONY: help build-flatpak-bundle ensure-flatpak-build-deps install install-flatpak install-print-screen restore-native-print check-install-scripts
 
 help:
 	@echo "Screenux helper targets"
@@ -21,7 +26,7 @@ help:
 	@echo "  make restore-native-print"
 	@echo "  make check-install-scripts"
 
-build-flatpak-bundle:
+build-flatpak-bundle: ensure-flatpak-build-deps
 	@command -v flatpak-builder >/dev/null 2>&1 || ( \
 		echo "flatpak-builder not found."; \
 		echo "Install it, then retry:"; \
@@ -32,6 +37,22 @@ build-flatpak-bundle:
 	@flatpak-builder --force-clean --repo="$(FLATPAK_REPO_DIR)" "$(FLATPAK_BUILD_DIR)" "$(FLATPAK_MANIFEST)"
 	@flatpak build-bundle "$(FLATPAK_REPO_DIR)" "$(FLATPAK_BUNDLE)" io.github.rafa.ScreenuxScreenshot
 	@echo "Bundle created: $(FLATPAK_BUNDLE)"
+
+ensure-flatpak-build-deps:
+	@command -v flatpak >/dev/null 2>&1 || ( \
+		echo "flatpak not found."; \
+		echo "Install it, then retry:"; \
+		echo "  Debian/Ubuntu: sudo apt-get install -y flatpak"; \
+		echo "  Fedora:        sudo dnf install -y flatpak"; \
+		echo "  Arch:          sudo pacman -S --needed flatpak"; \
+		exit 1)
+	@if flatpak info "$(FLATPAK_PLATFORM_REF)" >/dev/null 2>&1 && flatpak info "$(FLATPAK_SDK_REF)" >/dev/null 2>&1; then \
+		echo "Flatpak runtime deps already installed ($(FLATPAK_RUNTIME_VERSION))."; \
+	else \
+		echo "Installing missing Flatpak runtime deps: $(FLATPAK_PLATFORM_REF), $(FLATPAK_SDK_REF)"; \
+		flatpak remote-add --user --if-not-exists "$(FLATPAK_REMOTE)" "$(FLATPAK_REMOTE_URL)"; \
+		flatpak install -y --user "$(FLATPAK_REMOTE)" "$(FLATPAK_PLATFORM_REF)" "$(FLATPAK_SDK_REF)"; \
+	fi
 
 install-flatpak:
 	@binding="$(DEFAULT_KEYBINDING)"; \

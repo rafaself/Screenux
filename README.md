@@ -239,6 +239,8 @@ make build-flatpak-bundle FLATPAK_BUNDLE=./screenux-screenshot.flatpak
 make install-print-screen BUNDLE=./screenux-screenshot.flatpak
 ```
 
+`make build-flatpak-bundle` now auto-checks Flatpak build deps and, when missing, installs `org.gnome.Platform//47` and `org.gnome.Sdk//47` from Flathub in user scope.
+
 ```bash
 flatpak-builder --force-clean build-dir flatpak/io.github.rafa.ScreenuxScreenshot.json
 flatpak-builder --run build-dir flatpak/io.github.rafa.ScreenuxScreenshot.json screenux-screenshot
