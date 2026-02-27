@@ -16,6 +16,7 @@ Screenux focuses on a clean capture flow: take a screenshot, optionally annotate
 - Capture with `Take Screenshot`
 - Status updates: `Ready`, `Capturing...`, `Saved: <path>`, `Cancelled`, `Failed: <reason>`
 - Built-in editor for quick annotations (shapes/text)
+- Editor zoom controls with `Best fit` and quick presets (`33%` to `2000%`)
 - Timestamped output names with safe, non-overwriting writes
 
 ## 🚀 Quick start
