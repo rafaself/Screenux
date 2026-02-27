@@ -1,7 +1,7 @@
 SHELL := /usr/bin/env bash
 
 INSTALLER := ./install-screenux.sh
-DEFAULT_KEYBINDING := ['<Control><Shift>s']
+UNINSTALLER := ./uninstall-screenux.sh
 APP_ID := io.github.rafa.ScreenuxScreenshot
 FLATPAK_MANIFEST := flatpak/io.github.rafa.ScreenuxScreenshot.json
 FLATPAK_BUILD_DIR ?= build-dir
@@ -14,16 +14,16 @@ FLATPAK_RUNTIME_VERSION ?= 47
 FLATPAK_PLATFORM_REF ?= org.gnome.Platform//$(FLATPAK_RUNTIME_VERSION)
 FLATPAK_SDK_REF ?= org.gnome.Sdk//$(FLATPAK_RUNTIME_VERSION)
 
-.PHONY: help build-flatpak-bundle ensure-flatpak-build-deps install install-flatpak install-print-screen restore-native-print check-install-scripts
+.PHONY: help build-flatpak-bundle ensure-flatpak-build-deps install install-flatpak install-print-screen uninstall uninstall-preserve-data check-install-scripts
 
 help:
 	@echo "Screenux helper targets"
 	@echo ""
 	@echo "  make build-flatpak-bundle [FLATPAK_BUNDLE=./screenux-screenshot.flatpak]"
-	@echo "  make install [BUNDLE=./screenux-screenshot.flatpak] (auto-builds bundle if needed)"
-	@echo "  make install-flatpak [BUNDLE=./screenux-screenshot.flatpak] [KEYBINDING=\"['Print']\"]"
+	@echo "  make install [BUNDLE=./screenux-screenshot.flatpak]"
 	@echo "  make install-print-screen [BUNDLE=./screenux-screenshot.flatpak]"
-	@echo "  make restore-native-print"
+	@echo "  make uninstall"
+	@echo "  make uninstall-preserve-data"
 	@echo "  make check-install-scripts"
 
 build-flatpak-bundle: ensure-flatpak-build-deps
@@ -54,33 +54,28 @@ ensure-flatpak-build-deps:
 		flatpak install -y --user "$(FLATPAK_REMOTE)" "$(FLATPAK_PLATFORM_REF)" "$(FLATPAK_SDK_REF)"; \
 	fi
 
-install-flatpak:
-	@binding="$(DEFAULT_KEYBINDING)"; \
-	if [[ -n "$(KEYBINDING)" ]]; then binding="$(KEYBINDING)"; fi; \
-	$(INSTALLER) "$(BUNDLE)" "$$binding"
-
 install:
 	@if [[ -f "$(BUNDLE)" ]]; then \
-		$(INSTALLER) --print-screen "$(BUNDLE)"; \
-	elif command -v flatpak >/dev/null 2>&1 && flatpak info --user "$(APP_ID)" >/dev/null 2>&1; then \
-		$(INSTALLER) --print-screen; \
-	elif command -v flatpak-builder >/dev/null 2>&1; then \
-		$(MAKE) build-flatpak-bundle FLATPAK_BUNDLE="$(BUNDLE)"; \
-		$(INSTALLER) --print-screen "$(BUNDLE)"; \
+		$(INSTALLER) --bundle "$(BUNDLE)"; \
 	else \
-		echo "Screenux is not installed and bundle not found: $(BUNDLE)"; \
-		echo "Install flatpak-builder to auto-build, or pass an existing bundle:"; \
-		echo "  make install BUNDLE=./screenux-screenshot.flatpak"; \
-		echo "  make build-flatpak-bundle FLATPAK_BUNDLE=./screenux-screenshot.flatpak"; \
-		exit 1; \
+		$(INSTALLER); \
 	fi
 
 install-print-screen:
-	@$(INSTALLER) --print-screen "$(BUNDLE)"
+	@if [[ -f "$(BUNDLE)" ]]; then \
+		$(INSTALLER) --bundle "$(BUNDLE)" --print-screen; \
+	else \
+		$(INSTALLER) --print-screen; \
+	fi
 
-restore-native-print:
-	@$(INSTALLER) --restore-native-print
+install-flatpak: install
+
+uninstall:
+	@$(UNINSTALLER)
+
+uninstall-preserve-data:
+	@$(UNINSTALLER) --preserve-user-data
 
 check-install-scripts:
-	@bash -n install-screenux.sh scripts/install/install-screenux.sh scripts/install/lib/common.sh scripts/install/lib/gnome_shortcuts.sh
+	@bash -n install-screenux.sh uninstall-screenux.sh scripts/install/install-screenux.sh scripts/install/uninstall-screenux.sh scripts/install/lib/common.sh scripts/install/lib/gnome_shortcuts.sh
 	@echo "Installer scripts syntax: OK"

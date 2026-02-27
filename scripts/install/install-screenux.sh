@@ -8,51 +8,99 @@ source "${SCRIPT_DIR}/lib/gnome_shortcuts.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  ./install-screenux.sh [--print-screen] [/path/to/screenux-screenshot.flatpak] "['<Control><Shift>s']"
-  ./install-screenux.sh --restore-native-print
-
-Arguments:
-  1) Flatpak bundle path (optional if Screenux is already installed for user)
-  2) GNOME keybinding list syntax (optional, default: ['<Control><Shift>s'])
+  ./install-screenux.sh [--bundle /path/to/screenux-screenshot.flatpak] [--shortcut "['<Control><Shift>s']"]
+  ./install-screenux.sh [--bundle /path/to/screenux-screenshot.flatpak] --print-screen
 
 Options:
-  --print-screen          Bind Screenux to ['Print'] and disable GNOME native Print keys
-  --restore-native-print  Remove Screenux shortcut (if present) and restore native GNOME Print keys
+  --bundle PATH           Flatpak bundle path. If omitted and app is not installed, tries ./screenux-screenshot.flatpak
+  --shortcut BINDING      Configure GNOME shortcut with gsettings list syntax
+  --print-screen          Shortcut preset for ['Print'] + disable native GNOME Print bindings
+  --no-shortcut           Skip shortcut setup (default)
   -h, --help              Show this help
 
 Examples:
-  ./install-screenux.sh ./screenux-screenshot.flatpak
   ./install-screenux.sh
-  ./install-screenux.sh --print-screen ./screenux-screenshot.flatpak
-  ./install-screenux.sh --print-screen
-  ./install-screenux.sh ./screenux-screenshot.flatpak "['Print']"
-  ./install-screenux.sh --restore-native-print
+  ./install-screenux.sh --bundle ./screenux-screenshot.flatpak
+  ./install-screenux.sh --bundle ./screenux-screenshot.flatpak --print-screen
+  ./install-screenux.sh --bundle ./screenux-screenshot.flatpak --shortcut "['<Control><Shift>s']"
 EOF
+}
+
+resolve_default_bundle() {
+  if [[ -f "./${DEFAULT_BUNDLE_NAME}" ]]; then
+    printf '%s' "./${DEFAULT_BUNDLE_NAME}"
+    return 0
+  fi
+
+  local repo_bundle="${SCRIPT_DIR}/../../${DEFAULT_BUNDLE_NAME}"
+  if [[ -f "${repo_bundle}" ]]; then
+    printf '%s' "${repo_bundle}"
+    return 0
+  fi
+
+  return 1
 }
 
 install_bundle() {
   local flatpak_file="$1"
-
   if ! command -v flatpak >/dev/null 2>&1; then
-    fail "Required command not found: flatpak. Install it first (Debian/Ubuntu): apt-get update && sudo apt-get install -y flatpak"
+    fail "Required command not found: flatpak. Install Flatpak first, then rerun."
   fi
 
-  if flatpak info --user "${APP_ID}" >/dev/null 2>&1; then
+  if [[ -n "${flatpak_file}" ]]; then
+    [[ -f "${flatpak_file}" ]] || fail "Flatpak bundle not found: ${flatpak_file}"
+    echo "==> Installing Flatpak bundle: ${flatpak_file}"
+    flatpak install -y --user --or-update "${flatpak_file}"
+  elif flatpak info --user "${APP_ID}" >/dev/null 2>&1; then
     echo "==> ${APP_ID} is already installed for this user; skipping bundle install"
   else
-    [[ -n "${flatpak_file}" ]] || fail "Screenux is not installed. Provide a local .flatpak bundle path as first argument."
-    [[ -f "${flatpak_file}" ]] || fail "File not found: ${flatpak_file}"
-    echo "==> Installing Flatpak bundle: ${flatpak_file}"
-    flatpak install -y --user "${flatpak_file}"
+    local inferred_bundle=""
+    inferred_bundle="$(resolve_default_bundle || true)"
+    [[ -n "${inferred_bundle}" ]] || fail "Bundle not provided and ${APP_ID} is not installed. Use --bundle /path/to/${DEFAULT_BUNDLE_NAME}."
+    echo "==> Installing Flatpak bundle: ${inferred_bundle}"
+    flatpak install -y --user --or-update "${inferred_bundle}"
   fi
 
   create_wrapper
   create_desktop_entry
 }
 
+validate_installation() {
+  echo "==> Validating installation"
+
+  if ! flatpak info --user "${APP_ID}" >/dev/null 2>&1; then
+    fail "Validation failed: ${APP_ID} is not installed for current user."
+  fi
+  [[ -x "${WRAPPER_PATH}" ]] || fail "Validation failed: wrapper not executable at ${WRAPPER_PATH}"
+  [[ -f "${DESKTOP_FILE}" ]] || fail "Validation failed: desktop entry missing at ${DESKTOP_FILE}"
+}
+
+configure_shortcut() {
+  local shortcut_mode="$1"
+  local keybinding="$2"
+
+  case "${shortcut_mode}" in
+    none)
+      echo "==> Shortcut setup skipped"
+      ;;
+    custom)
+      configure_gnome_shortcut "${keybinding}"
+      ;;
+    print)
+      configure_gnome_shortcut "${PRINT_KEYBINDING}"
+      disable_native_print_keys
+      ;;
+    *)
+      fail "Unexpected shortcut mode: ${shortcut_mode}"
+      ;;
+  esac
+}
+
 main() {
-  local use_print_screen="false"
-  local restore_native_print="false"
+  local bundle_path=""
+  local shortcut_mode="none"
+  local keybinding=""
+  local shortcut_option_seen="false"
   local positional=()
 
   while (($# > 0)); do
@@ -61,11 +109,28 @@ main() {
         usage
         exit 0
         ;;
-      --print-screen)
-        use_print_screen="true"
+      --bundle)
+        shift
+        (($# > 0)) || fail "--bundle requires a path"
+        bundle_path="$1"
         ;;
-      --restore-native-print)
-        restore_native_print="true"
+      --shortcut)
+        shift
+        (($# > 0)) || fail "--shortcut requires a binding list value"
+        [[ "${shortcut_option_seen}" == "false" ]] || fail "Only one of --shortcut, --print-screen, or --no-shortcut can be used."
+        shortcut_option_seen="true"
+        shortcut_mode="custom"
+        keybinding="$1"
+        ;;
+      --print-screen)
+        [[ "${shortcut_option_seen}" == "false" ]] || fail "Only one of --shortcut, --print-screen, or --no-shortcut can be used."
+        shortcut_option_seen="true"
+        shortcut_mode="print"
+        ;;
+      --no-shortcut)
+        [[ "${shortcut_option_seen}" == "false" ]] || fail "Only one of --shortcut, --print-screen, or --no-shortcut can be used."
+        shortcut_option_seen="true"
+        shortcut_mode="none"
         ;;
       --)
         shift
@@ -85,28 +150,19 @@ main() {
     shift
   done
 
-  if [[ "${restore_native_print}" == "true" ]]; then
-    remove_screenux_shortcut
-    restore_native_print_keys
-    echo "==> Done. Native Print Screen behavior restored (GNOME)."
-    exit 0
+  if ((${#positional[@]} > 1)); then
+    fail "Unexpected positional arguments. Use --bundle PATH and optional shortcut flags."
   fi
 
-  local flatpak_file="${positional[0]:-}"
-  local keybinding="${positional[1]:-${DEFAULT_KEYBINDING}}"
-
-  if [[ "${use_print_screen}" == "true" ]]; then
-    keybinding="${PRINT_KEYBINDING}"
+  if [[ -z "${bundle_path}" && ${#positional[@]} -eq 1 ]]; then
+    bundle_path="${positional[0]}"
   fi
 
-  install_bundle "${flatpak_file}"
+  install_bundle "${bundle_path}"
+  configure_shortcut "${shortcut_mode}" "${keybinding}"
+  validate_installation
 
-  configure_gnome_shortcut "${keybinding}"
-  if [[ "${keybinding}" == "${PRINT_KEYBINDING}" ]]; then
-    disable_native_print_keys
-  fi
-
-  echo "==> Done."
+  echo "==> Installation complete"
   echo "Run:"
   echo "  ${WRAPPER_PATH}"
   echo "Or capture directly:"

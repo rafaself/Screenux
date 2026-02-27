@@ -7,6 +7,8 @@ WRAPPER_DIR="${HOME}/.local/bin"
 WRAPPER_PATH="${WRAPPER_DIR}/screenux-screenshot"
 DESKTOP_DIR="${HOME}/.local/share/applications"
 DESKTOP_FILE="${DESKTOP_DIR}/${APP_ID}.desktop"
+APP_DATA_DIR="${HOME}/.var/app/${APP_ID}"
+DEFAULT_BUNDLE_NAME="screenux-screenshot.flatpak"
 
 DEFAULT_KEYBINDING="['<Control><Shift>s']"
 PRINT_KEYBINDING="['Print']"
@@ -51,4 +53,25 @@ Icon=${APP_ID}
 Terminal=false
 Categories=Utility;Graphics;
 EOF
+}
+
+remove_wrapper() {
+  if [[ -e "${WRAPPER_PATH}" || -L "${WRAPPER_PATH}" ]]; then
+    echo "==> Removing wrapper command: ${WRAPPER_PATH}"
+    rm -f -- "${WRAPPER_PATH}"
+  fi
+}
+
+remove_desktop_entry() {
+  if [[ -e "${DESKTOP_FILE}" || -L "${DESKTOP_FILE}" ]]; then
+    echo "==> Removing desktop entry: ${DESKTOP_FILE}"
+    rm -f -- "${DESKTOP_FILE}"
+  fi
+}
+
+remove_app_data() {
+  if [[ -d "${APP_DATA_DIR}" ]]; then
+    echo "==> Removing user data: ${APP_DATA_DIR}"
+    rm -rf -- "${APP_DATA_DIR}"
+  fi
 }

@@ -19,89 +19,35 @@ Screenux focuses on a clean capture flow: take a screenshot, optionally annotate
 - Editor zoom controls with `Best fit` and quick presets (`33%` to `2000%`)
 - Timestamped output names with safe, non-overwriting writes
 
-## 🚀 Quick start
-
-### 1) Install system dependencies
-
-- `python3`
-- `python3-gi`
-- GTK4 introspection (`gir1.2-gtk-4.0` on Debian/Ubuntu)
-- `xdg-desktop-portal` plus a desktop backend (GNOME/KDE/etc.)
-
-### 2) Clone the project
+## Install
 
 ```bash
-git clone https://github.com/rafaself/Screenux.git
-cd Screenux
+./install-screenux.sh --bundle /path/to/screenux-screenshot.flatpak
 ```
 
-### 3) Run Screenux
+Optional GNOME Print Screen shortcut:
 
 ```bash
-./screenux-screenshot
+./install-screenux.sh --bundle /path/to/screenux-screenshot.flatpak --print-screen
 ```
 
-### 4) Install Flatpak bundle + optional GNOME shortcut
-
-If you built or downloaded a Screenux Flatpak bundle, use the installer helper:
-
-To build a local bundle first:
+If Screenux is already installed for your user, you can rerun:
 
 ```bash
-make build-flatpak-bundle FLATPAK_BUNDLE=./screenux-screenshot.flatpak
-```
-
-```bash
-./install-screenux.sh ./screenux-screenshot.flatpak "['<Control><Shift>s']"
-
-# if already installed for current user
 ./install-screenux.sh
 ```
 
-Or with Make targets:
+## Uninstall
 
 ```bash
-make install-flatpak [BUNDLE=./screenux-screenshot.flatpak]
+./uninstall-screenux.sh
 ```
 
-Use Print Screen directly with Screenux (GNOME):
+Preserve app data in `~/.var/app/io.github.rafa.ScreenuxScreenshot`:
 
 ```bash
-./install-screenux.sh --print-screen ./screenux-screenshot.flatpak
-
-# if already installed for current user
-./install-screenux.sh --print-screen
-
-# or
-make install [BUNDLE=./screenux-screenshot.flatpak]
-
-# or (explicit target)
-make install-print-screen [BUNDLE=./screenux-screenshot.flatpak]
+./uninstall-screenux.sh --preserve-user-data
 ```
-
-`make install` behavior:
-
-- Uses the bundle if it exists.
-- If Screenux is already installed for the user, it configures shortcuts without a bundle.
-- If neither is true and `flatpak-builder` is available, it auto-builds the bundle and continues.
-
-Restore GNOME native Print Screen behavior:
-
-```bash
-./install-screenux.sh --restore-native-print
-
-# or
-make restore-native-print
-```
-
-Notes:
-
-- The first argument is optional only when Screenux is already installed for the current user; otherwise provide a local `.flatpak` file.
-- The second argument is optional and uses GNOME `gsettings` binding syntax.
-- If Screenux is already installed for the current user, bundle install is skipped and only wrapper/shortcut setup is applied.
-- On non-GNOME desktops, install still completes and shortcut setup is skipped.
-- `--restore-native-print` removes the Screenux custom GNOME shortcut and resets GNOME screenshot keybindings.
-- Installer internals are organized under `scripts/install/` with reusable helper modules.
 
 ## 🖱️ Usage
 
