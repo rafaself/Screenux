@@ -79,6 +79,12 @@ make install [BUNDLE=./screenux-screenshot.flatpak]
 make install-print-screen [BUNDLE=./screenux-screenshot.flatpak]
 ```
 
+`make install` behavior:
+
+- Uses the bundle if it exists.
+- If Screenux is already installed for the user, it configures shortcuts without a bundle.
+- If neither is true and `flatpak-builder` is available, it auto-builds the bundle and continues.
+
 Restore GNOME native Print Screen behavior:
 
 ```bash

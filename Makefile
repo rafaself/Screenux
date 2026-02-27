@@ -2,6 +2,7 @@ SHELL := /usr/bin/env bash
 
 INSTALLER := ./install-screenux.sh
 DEFAULT_KEYBINDING := ['<Control><Shift>s']
+APP_ID := io.github.rafa.ScreenuxScreenshot
 FLATPAK_MANIFEST := flatpak/io.github.rafa.ScreenuxScreenshot.json
 FLATPAK_BUILD_DIR ?= build-dir
 FLATPAK_REPO_DIR ?= repo
@@ -14,7 +15,7 @@ help:
 	@echo "Screenux helper targets"
 	@echo ""
 	@echo "  make build-flatpak-bundle [FLATPAK_BUNDLE=./screenux-screenshot.flatpak]"
-	@echo "  make install [BUNDLE=./screenux-screenshot.flatpak]"
+	@echo "  make install [BUNDLE=./screenux-screenshot.flatpak] (auto-builds bundle if needed)"
 	@echo "  make install-flatpak [BUNDLE=./screenux-screenshot.flatpak] [KEYBINDING=\"['Print']\"]"
 	@echo "  make install-print-screen [BUNDLE=./screenux-screenshot.flatpak]"
 	@echo "  make restore-native-print"
@@ -40,8 +41,17 @@ install-flatpak:
 install:
 	@if [[ -f "$(BUNDLE)" ]]; then \
 		$(INSTALLER) --print-screen "$(BUNDLE)"; \
-	else \
+	elif command -v flatpak >/dev/null 2>&1 && flatpak info --user "$(APP_ID)" >/dev/null 2>&1; then \
 		$(INSTALLER) --print-screen; \
+	elif command -v flatpak-builder >/dev/null 2>&1; then \
+		$(MAKE) build-flatpak-bundle FLATPAK_BUNDLE="$(BUNDLE)"; \
+		$(INSTALLER) --print-screen "$(BUNDLE)"; \
+	else \
+		echo "Screenux is not installed and bundle not found: $(BUNDLE)"; \
+		echo "Install flatpak-builder to auto-build, or pass an existing bundle:"; \
+		echo "  make install BUNDLE=./screenux-screenshot.flatpak"; \
+		echo "  make build-flatpak-bundle FLATPAK_BUNDLE=./screenux-screenshot.flatpak"; \
+		exit 1; \
 	fi
 
 install-print-screen:
