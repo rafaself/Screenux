@@ -39,6 +39,12 @@ Minimal Linux desktop screenshot app built with Python + GTK4 and xdg-desktop-po
 
 ## Automated Checks
 
+Install test dependencies (once):
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+```
+
 ```bash
 python3 -m py_compile src/screenux_screenshot.py
 pytest -q
