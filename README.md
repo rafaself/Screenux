@@ -49,16 +49,28 @@ If you built or downloaded a Screenux Flatpak bundle, use the installer helper:
 ./install-screenux.sh ./screenux-screenshot.flatpak "['<Control><Shift>s']"
 ```
 
+Or with Make targets:
+
+```bash
+make install-flatpak BUNDLE=./screenux-screenshot.flatpak
+```
+
 Use Print Screen directly with Screenux (GNOME):
 
 ```bash
 ./install-screenux.sh --print-screen ./screenux-screenshot.flatpak
+
+# or
+make install-print-screen BUNDLE=./screenux-screenshot.flatpak
 ```
 
 Restore GNOME native Print Screen behavior:
 
 ```bash
 ./install-screenux.sh --restore-native-print
+
+# or
+make restore-native-print
 ```
 
 Notes:
@@ -67,6 +79,7 @@ Notes:
 - The second argument is optional and uses GNOME `gsettings` binding syntax.
 - On non-GNOME desktops, install still completes and shortcut setup is skipped.
 - `--restore-native-print` removes the Screenux custom GNOME shortcut and resets GNOME screenshot keybindings.
+- Installer internals are organized under `scripts/install/` with reusable helper modules.
 
 ## 🖱️ Usage
 
