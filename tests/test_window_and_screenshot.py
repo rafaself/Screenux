@@ -324,6 +324,23 @@ def test_window_top_level_helpers():
     assert window._extract_uri({"uri": "file:///tmp/y.png"}) == "file:///tmp/y.png"
 
 
+def test_window_initial_size_and_center_helpers():
+    width, height = window._initial_window_size()
+    assert width >= 480
+    assert height >= 180
+
+    x, y = window._center_position(
+        monitor_x=100,
+        monitor_y=50,
+        monitor_width=1920,
+        monitor_height=1080,
+        window_width=width,
+        window_height=height,
+    )
+    assert x == 100 + (1920 - width) // 2
+    assert y == 50 + (1080 - height) // 2
+
+
 def test_window_uri_to_local_path(tmp_path):
     local = tmp_path / "cap.png"
     local.write_bytes(b"x")

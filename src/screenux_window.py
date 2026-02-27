@@ -19,6 +19,27 @@ PORTAL_DEST = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"
 PORTAL_SCREENSHOT_IFACE = "org.freedesktop.portal.Screenshot"
 PORTAL_REQUEST_IFACE = "org.freedesktop.portal.Request"
+_DEFAULT_WINDOW_WIDTH = 520
+_DEFAULT_WINDOW_HEIGHT = 220
+
+
+def _initial_window_size() -> tuple[int, int]:
+    return (_DEFAULT_WINDOW_WIDTH, _DEFAULT_WINDOW_HEIGHT)
+
+
+def _center_position(
+    *,
+    monitor_x: int,
+    monitor_y: int,
+    monitor_width: int,
+    monitor_height: int,
+    window_width: int,
+    window_height: int,
+) -> tuple[int, int]:
+    return (
+        monitor_x + (monitor_width - window_width) // 2,
+        monitor_y + (monitor_height - window_height) // 2,
+    )
 
 
 def _shortcut_display_text(shortcut: str) -> str:
@@ -133,7 +154,8 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
     ):
         super().__init__(application=app, title="Screenux Screenshot")
         self.set_icon_name(icon_name)
-        self.set_default_size(360, 180)
+        width, height = _initial_window_size()
+        self.set_default_size(width, height)
 
         self._resolve_save_dir = resolve_save_dir
         self._load_config = load_config
@@ -148,6 +170,7 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         self._hotkey_entry: Gtk.Entry | None = None
         self._hotkey_value_label: Gtk.Label | None = None
         self._present_after_capture = False
+        self._did_initial_center = False
 
         self._main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self._main_box.set_margin_top(16)
@@ -306,6 +329,45 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         self._present_after_capture = True
         self.take_screenshot()
 
+    def center_on_screen_once(self) -> None:
+        if self._did_initial_center:
+            return
+        if self._try_center_window():
+            self._did_initial_center = True
+
+    def _try_center_window(self) -> bool:
+        try:
+            surface = self.get_surface()
+            if surface is None:
+                return False
+            display = surface.get_display() if hasattr(surface, "get_display") else None
+            if display is None or not hasattr(display, "get_monitor_at_surface"):
+                return False
+            monitor = display.get_monitor_at_surface(surface)
+            if monitor is None or not hasattr(monitor, "get_geometry"):
+                return False
+            geometry = monitor.get_geometry()
+            width, height = _initial_window_size()
+            x, y = _center_position(
+                monitor_x=int(getattr(geometry, "x", 0)),
+                monitor_y=int(getattr(geometry, "y", 0)),
+                monitor_width=int(getattr(geometry, "width", width)),
+                monitor_height=int(getattr(geometry, "height", height)),
+                window_width=width,
+                window_height=height,
+            )
+            mover = surface if hasattr(surface, "move") else self
+            if not hasattr(mover, "move"):
+                return False
+            mover.move(x, y)
+            return True
+        except Exception:
+            return False
+
+    def present_with_initial_center(self) -> None:
+        self.center_on_screen_once()
+        self.present()
+
     def _build_handle_token(self) -> str:
         self._request_counter += 1
         return f"screenux_{os.getpid()}_{self._request_counter}_{int(time.time() * 1000)}"
@@ -323,7 +385,10 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         self._button.set_sensitive(True)
         self._set_status(status)
         if getattr(self, "_present_after_capture", False):
-            self.present()
+            if hasattr(self, "present_with_initial_center"):
+                self.present_with_initial_center()
+            else:
+                self.present()
             self._present_after_capture = False
 
     def _fail(self, reason: str) -> None:
@@ -442,7 +507,10 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         )
         self.set_child(editor)
         if getattr(self, "_present_after_capture", False):
-            self.present()
+            if hasattr(self, "present_with_initial_center"):
+                self.present_with_initial_center()
+            else:
+                self.present()
             self._present_after_capture = False
 
     def _on_editor_save(self, saved_path: Path) -> None:

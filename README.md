@@ -20,6 +20,7 @@ Screenux focuses on a clean capture flow: take a screenshot, optionally annotate
 - Editor zoom controls with `Best fit` and quick presets (`33%` to `2000%`)
 - Timestamped output names with safe, non-overwriting writes
 - Packaged app icon for desktop launcher integration
+- Wider default window for comfortable hotkey editing, with centered initial presentation (best-effort by desktop/session)
 
 ## Install
 

@@ -239,7 +239,10 @@ if Gtk is not None:
             if auto_capture and hasattr(window, "trigger_shortcut_capture"):
                 window.trigger_shortcut_capture()
                 return
-            window.present()
+            if hasattr(window, "present_with_initial_center"):
+                window.present_with_initial_center()
+            else:
+                window.present()
             if auto_capture:
                 GLib.idle_add(self._trigger_auto_capture, window)
 else:
