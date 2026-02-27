@@ -1,68 +1,116 @@
 # Screenux Screenshot
 
-Minimal Linux desktop screenshot app built with Python + GTK4 and xdg-desktop-portal.
+Simple, private screenshot tool for Linux desktops.
 
-## Features
+Screenux is built for people who want a clean screenshot flow without extra clutter. Open the app, capture your screen, make quick annotations if needed, and save locally.
 
-- One button: `Take Screenshot`
-- One status line: `Ready`, `Capturing...`, `Saved: <path>`, `Cancelled`, `Failed: <reason>`
-- Wayland-compatible capture through `org.freedesktop.portal.Screenshot`
-- Saves to Desktop with timestamped filename
-- Falls back to Home when Desktop is unavailable
-- Enforces offline-only runtime behavior (no network operations)
-- Uses secure, non-overwriting image writes and strict local file URI validation
+## Why people use Screenux
 
-## Security Posture
+- Clean interface: one main action, clear status messages.
+- Local-first: screenshots stay on your machine.
+- Wayland-friendly: uses desktop portal screenshot APIs.
+- Practical defaults: saves to Desktop, then Home if Desktop is unavailable.
 
-- Offline-only: Python-level networking and DNS resolution are blocked at runtime.
-- Least privilege: Flatpak requests only portal access and Desktop filesystem access (no full Home access).
-- Safe file handling: output writes use exclusive create mode to avoid overwriting existing files.
-- Defensive loading: screenshot sources must be local `file://` URIs that resolve to readable regular files.
-- Defensive config parsing: invalid, non-object, or oversized config files are ignored.
+## What it does
 
-## Project Layout
+- Capture via `Take Screenshot`.
+- Show status updates: `Ready`, `Capturing...`, `Saved: <path>`, `Cancelled`, `Failed: <reason>`.
+- Open an editor to add simple annotations (shapes/text) before saving.
+- Save using timestamped filenames with safe, non-overwriting writes.
 
-- `src/screenux_screenshot.py`: entrypoint + config/path helpers
-- `src/screenux_window.py`: main window and portal flow
-- `src/screenux_editor.py`: annotation editor and image rendering
-- `screenux-screenshot`: launcher script
-- `io.github.rafa.ScreenuxScreenshot.desktop`: desktop entry
-- `flatpak/io.github.rafa.ScreenuxScreenshot.json`: Flatpak manifest
-- `docker/Dockerfile.dev`: Docker dev/build image
-- `docker-compose.yml`: Docker Compose service
-- `tests/test_paths.py`: automated tests for save-path logic
+## Installation
 
-## Run on Host
+### 1) System dependencies
 
-### Dependencies
+Install:
 
 - `python3`
 - `python3-gi`
 - GTK4 introspection (`gir1.2-gtk-4.0` on Debian/Ubuntu)
 - `xdg-desktop-portal` with a desktop backend (GNOME/KDE/etc.)
 
-### Run
+### 2) Get the project
+
+```bash
+git clone https://github.com/rafaself/Screenux.git
+cd Screenux
+```
+
+### 3) Start the app
 
 ```bash
 ./screenux-screenshot
 ```
 
-## Automated Checks
+## Usage
 
-Install test dependencies (once):
+1. Launch the app.
+2. Click `Take Screenshot`.
+3. Confirm or cancel in your system screenshot flow.
+4. (Optional) annotate in the editor.
+5. Save and check the status line for the final file path.
+
+Folder behavior:
+
+- Default save folder is Desktop.
+- If Desktop is not writable, it falls back to Home.
+- You can change the target folder from the app (`Save to` → `Change…`).
+
+## Development
+
+### Project layout
+
+- `src/screenux_screenshot.py`: app entrypoint, config, path helpers, offline enforcement
+- `src/screenux_window.py`: GTK window, portal flow, save-folder picker
+- `src/screenux_editor.py`: annotation editor and secure file writing
+- `tests/`: automated tests for path, window, screenshot, and editor logic
+- `screenux-screenshot`: launcher script used both on host and in Flatpak
+
+### Local dev run
+
+```bash
+./screenux-screenshot
+```
+
+### Dev dependencies
 
 ```bash
 python3 -m pip install -r requirements-dev.txt
 ```
+
+## Testing
+
+Run quick checks locally:
 
 ```bash
 python3 -m py_compile src/screenux_screenshot.py
 pytest -q
 ```
 
-## Docker (Dev/Build Only)
+Manual sanity scenarios:
 
-Use Docker for reproducible checks. GUI capture is not intended to run inside Docker.
+1. App starts with `Ready`.
+2. Capture shows `Capturing...` and returns to interactive state.
+3. Save shows `Saved: <path>` and creates a file.
+4. Cancel shows `Cancelled`.
+5. Invalid/failed portal path shows a clear `Failed: ...` message.
+
+## CI
+
+⚙️ This repository currently does not include a checked-in CI workflow.
+
+Recommended CI baseline (same checks used locally):
+
+- `python3 -m py_compile src/screenux_screenshot.py`
+- `pytest -q`
+
+If you want, you can add these commands to a GitHub Actions workflow under `.github/workflows/`.
+
+## Packaging
+
+### Docker (dev/build environment)
+
+Use Docker for reproducible test runs (GUI screenshot capture is not meant to run in Docker):
 
 ```bash
 docker compose build dev
@@ -70,20 +118,20 @@ docker compose run --rm dev python3 -m py_compile src/screenux_screenshot.py
 docker compose run --rm dev pytest -q
 ```
 
-## Flatpak
+### Flatpak
 
-Build and run locally:
+📦 Build and run locally:
 
 ```bash
 flatpak-builder --force-clean build-dir flatpak/io.github.rafa.ScreenuxScreenshot.json
 flatpak-builder --run build-dir flatpak/io.github.rafa.ScreenuxScreenshot.json screenux-screenshot
 ```
 
-## Manual Test Scenarios
+Flatpak permissions are intentionally narrow (portal access + Desktop filesystem).
 
-1. Launch app and verify status starts as `Ready`.
-2. Click `Take Screenshot`; verify status becomes `Capturing...`.
-3. Complete capture; verify status shows `Saved: <path>` and file exists.
-4. Cancel capture; verify status becomes `Cancelled`.
-5. Verify Desktop-missing fallback saves under Home.
-6. Stop portal service to verify failure status and button recovery.
+## Privacy and security notes
+
+- Offline-only runtime behavior: networking and DNS calls are blocked.
+- Screenshot source validation accepts only local, readable `file://` URIs.
+- Config parsing is defensive (invalid/non-object/oversized config files are ignored).
+- Saved files are created with exclusive mode to avoid accidental overwrite.
