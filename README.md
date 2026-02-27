@@ -147,6 +147,8 @@ Notes:
 
 - `dev` runs as your host UID/GID via `LOCAL_UID`/`LOCAL_GID` (defaults to `1000:1000`) to avoid root-owned files in the repository.
 - You can put `LOCAL_UID` and `LOCAL_GID` in `.env` (for example by copying `.env.example`) to avoid exporting them each time.
+- `.env` must live at the repository root (same directory as `docker-compose.yml`) because Docker Compose auto-loads it from there.
+- `.env` is used for Docker Compose configuration only; the desktop app runtime does not read `.env`.
 - Python bytecode generation is disabled in the container to reduce cache noise in bind-mounted sources.
 - Pytest cache provider is disabled in the container to avoid bind-mount permission issues on host-mounted workspaces.
 
