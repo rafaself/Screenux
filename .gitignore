@@ -15,6 +15,9 @@ pip-wheel-metadata/
 venv/
 env/
 
+# Local environment configuration
+.env
+
 # Testing and coverage
 .pytest_cache/
 .coverage
