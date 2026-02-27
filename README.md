@@ -97,14 +97,23 @@ Manual sanity scenarios:
 
 ## CI
 
-⚙️ This repository currently does not include a checked-in CI workflow.
+⚙️ GitHub Actions workflow: `.github/workflows/ci.yml`
 
-Recommended CI baseline (same checks used locally):
+The CI pipeline runs automatically on:
 
-- `python3 -m py_compile src/screenux_screenshot.py`
-- `pytest -q`
+- Pull requests targeting `main`
+- Pushes to `main`
+- Published releases
 
-If you want, you can add these commands to a GitHub Actions workflow under `.github/workflows/`.
+Pipeline gates:
+
+- **Quality checks**: static compile validation (`python -m compileall -q src`)
+- **Automated tests**: `pytest -q`
+- **Security auditing**: Bandit scan on `src/` and dependency vulnerability audit with `pip-audit`
+- **Dependency validation**: `pip check` and PR dependency review (`actions/dependency-review-action`)
+- **Build verification**: launcher syntax check, Flatpak manifest JSON validation, desktop entry validation, Docker Compose config validation, and Docker image build
+
+These checks are intended to be required before merge/release so changes must satisfy code quality, security, and packaging requirements.
 
 ## Packaging
 

@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality-and-security:
+    name: Quality & Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt bandit pip-audit
+
+      - name: Static compile check
+        run: python -m compileall -q src
+
+      - name: Security scan (Bandit)
+        run: bandit -q -r src -x tests
+
+      - name: Dependency vulnerability audit
+        run: pip-audit -r requirements-dev.txt --strict
+
+      - name: Dependency consistency check
+        run: python -m pip check
+
+  dependency-review:
+    name: Dependency Review (PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@v4
+
+  tests:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3-gi \
+            python3-gi-cairo \
+            python3-cairo \
+            gir1.2-gtk-4.0
+
+      - name: Install test dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest -q
+
+  build-verification:
+    name: Build & Packaging Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate launcher script syntax
+        run: bash -n screenux-screenshot
+
+      - name: Validate Flatpak manifest JSON
+        run: python3 -m json.tool flatpak/io.github.rafa.ScreenuxScreenshot.json > /dev/null
+
+      - name: Validate desktop entry
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends desktop-file-utils
+          desktop-file-validate io.github.rafa.ScreenuxScreenshot.desktop
+
+      - name: Validate Docker Compose config
+        run: docker compose config > /dev/null
+
+      - name: Verify Docker dev image build
+        run: docker build -f docker/Dockerfile.dev -t screenux-dev-ci .
