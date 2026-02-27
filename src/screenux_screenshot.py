@@ -9,6 +9,11 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+try:
+    from screenux_hotkey import HotkeyManager
+except ModuleNotFoundError:  # pragma: no cover - supports package-style imports in tests
+    from src.screenux_hotkey import HotkeyManager
+
 GI_IMPORT_ERROR: Exception | None = None
 try:
     import gi
@@ -179,16 +184,29 @@ if Gtk is not None:
 if Gtk is not None:
     class ScreenuxScreenshotApp(Gtk.Application):  # type: ignore[misc]
         def __init__(self, auto_capture: bool = False) -> None:
-            super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
+            super().__init__(
+                application_id=APP_ID,
+                flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
+            )
             self._auto_capture_pending = auto_capture
+            self._hotkey_manager = HotkeyManager(load_config, save_config)
 
         def _trigger_auto_capture(self, window: MainWindow) -> bool:
             window.take_screenshot()
             return False
 
+        def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:
+            args = [arg.decode("utf-8") if isinstance(arg, bytes) else str(arg) for arg in command_line.get_arguments()]
+            _, auto_capture = _parse_cli_args(args)
+            if auto_capture:
+                self._auto_capture_pending = True
+            self.activate()
+            return 0
+
         def do_activate(self) -> None:
             icon_name = select_icon_name()
             Gtk.Window.set_default_icon_name(icon_name)
+            hotkey_result = self._hotkey_manager.ensure_registered()
             window = self.props.active_window
             if window is None:
                 window = MainWindow(
@@ -199,9 +217,13 @@ if Gtk is not None:
                     save_config=save_config,
                     build_output_path=build_output_path,
                     format_status_saved=format_status_saved,
+                    hotkey_manager=self._hotkey_manager,
+                    initial_hotkey_warning=hotkey_result.warning,
                 )
             else:
                 window.set_icon_name(icon_name)
+                if hotkey_result.warning and hasattr(window, "set_nonblocking_warning"):
+                    window.set_nonblocking_warning(hotkey_result.warning)
             window.present()
             if self._auto_capture_pending:
                 self._auto_capture_pending = False
@@ -217,9 +239,9 @@ def main(argv: list[str]) -> int:
     if GI_IMPORT_ERROR is not None or Gtk is None or MainWindow is None:
         print(f"Missing GTK4/PyGObject dependencies: {GI_IMPORT_ERROR}", file=sys.stderr)
         return 1
-    app_argv, auto_capture = _parse_cli_args(argv)
+    _, auto_capture = _parse_cli_args(argv)
     app = ScreenuxScreenshotApp(auto_capture=auto_capture)
-    return app.run(app_argv)
+    return app.run(argv)
 
 
 if __name__ == "__main__":

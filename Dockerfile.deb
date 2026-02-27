@@ -1,0 +1,39 @@
+FROM debian:bookworm-slim
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG APP_NAME=screenux-screenshot
+ARG APP_VERSION=0.1.0
+ARG APP_ARCH=amd64
+ARG OUT_DIR=/out
+
+ENV APP_NAME="${APP_NAME}" \
+    APP_VERSION="${APP_VERSION}" \
+    APP_ARCH="${APP_ARCH}" \
+    OUT_DIR="${OUT_DIR}" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      python3 \
+      libpython3.11 \
+      python3-venv \
+      python3-pip \
+      python3-gi \
+      python3-gi-cairo \
+      python3-cairo \
+      gir1.2-gtk-4.0 \
+      patchelf \
+      binutils \
+      dpkg-dev \
+      desktop-file-utils \
+      build-essential \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+COPY . /workspace
+
+CMD ["bash", "scripts/build_deb.sh"]
