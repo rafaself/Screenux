@@ -12,19 +12,28 @@ SCHEMA="org.gnome.settings-daemon.plugins.media-keys"
 CUSTOM_SCHEMA="${SCHEMA}.custom-keybinding"
 KEY="custom-keybindings"
 BASE_PATH="/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings"
+SHELL_SCHEMA="org.gnome.shell.keybindings"
 
 usage() {
   cat <<'EOF'
 Usage:
-  ./install-screenux.sh /path/to/screenux-screenshot.flatpak "['<Control><Shift>s']"
+  ./install-screenux.sh [--print-screen] /path/to/screenux-screenshot.flatpak "['<Control><Shift>s']"
+  ./install-screenux.sh --restore-native-print
 
 Arguments:
-  1) Flatpak bundle path (required)
+  1) Flatpak bundle path (required for install mode)
   2) GNOME keybinding list syntax (optional, default: ['<Control><Shift>s'])
+
+Options:
+  --print-screen          Bind Screenux to ['Print'] and disable GNOME native Print keys
+  --restore-native-print  Remove Screenux shortcut (if present) and restore native GNOME Print keys
+  -h, --help              Show this help
 
 Examples:
   ./install-screenux.sh ./screenux-screenshot.flatpak
+  ./install-screenux.sh --print-screen ./screenux-screenshot.flatpak
   ./install-screenux.sh ./screenux-screenshot.flatpak "['Print']"
+  ./install-screenux.sh --restore-native-print
 EOF
 }
 
@@ -70,6 +79,121 @@ build_gsettings_list() {
   printf '%s' "${out}"
 }
 
+schema_exists() {
+  local schema="$1"
+  gsettings list-schemas | grep -qx "${schema}"
+}
+
+key_exists() {
+  local schema="$1"
+  local key="$2"
+  gsettings list-keys "${schema}" | grep -qx "${key}"
+}
+
+get_custom_paths() {
+  local existing
+  existing="$(gsettings get "${SCHEMA}" "${KEY}")"
+  grep -oE "'${BASE_PATH}/custom[0-9]+/'" <<<"${existing}" | tr -d "'" || true
+}
+
+find_screenux_path() {
+  local p current_name current_command
+  while IFS= read -r p; do
+    [[ -n "${p}" ]] || continue
+    current_name="$(gsettings get "${CUSTOM_SCHEMA}:${p}" name 2>/dev/null || true)"
+    current_command="$(gsettings get "${CUSTOM_SCHEMA}:${p}" command 2>/dev/null || true)"
+    current_name="$(strip_single_quotes "${current_name}")"
+    current_command="$(strip_single_quotes "${current_command}")"
+    if [[ "${current_name}" == "${APP_NAME}" || "${current_command}" == "${WRAPPER_PATH} --capture" ]]; then
+      printf '%s' "${p}"
+      return 0
+    fi
+  done < <(get_custom_paths)
+  return 1
+}
+
+remove_screenux_shortcut() {
+  if ! command -v gsettings >/dev/null 2>&1; then
+    return 0
+  fi
+  if ! schema_exists "${SCHEMA}"; then
+    return 0
+  fi
+
+  local screenux_path
+  screenux_path="$(find_screenux_path || true)"
+  [[ -n "${screenux_path}" ]] || return 0
+
+  local path_array=()
+  mapfile -t path_array < <(get_custom_paths)
+
+  local updated_paths=()
+  local p
+  for p in "${path_array[@]}"; do
+    if [[ "${p}" != "${screenux_path}" ]]; then
+      updated_paths+=("${p}")
+    fi
+  done
+
+  gsettings set "${SCHEMA}" "${KEY}" "$(build_gsettings_list "${updated_paths[@]}")"
+  echo "==> Removed Screenux GNOME custom shortcut: ${screenux_path}"
+}
+
+set_key_if_exists() {
+  local schema="$1"
+  local key="$2"
+  local value="$3"
+  if schema_exists "${schema}" && key_exists "${schema}" "${key}"; then
+    gsettings set "${schema}" "${key}" "${value}"
+    return 0
+  fi
+  return 1
+}
+
+reset_key_if_exists() {
+  local schema="$1"
+  local key="$2"
+  if schema_exists "${schema}" && key_exists "${schema}" "${key}"; then
+    gsettings reset "${schema}" "${key}"
+    return 0
+  fi
+  return 1
+}
+
+disable_native_print_keys() {
+  if ! command -v gsettings >/dev/null 2>&1; then
+    echo "NOTE: gsettings not available; cannot disable native Print bindings."
+    return 0
+  fi
+
+  set_key_if_exists "${SHELL_SCHEMA}" "show-screenshot" "[]" || true
+  set_key_if_exists "${SHELL_SCHEMA}" "show-screenshot-ui" "[]" || true
+  set_key_if_exists "${SHELL_SCHEMA}" "show-screen-recording-ui" "[]" || true
+
+  set_key_if_exists "${SCHEMA}" "screenshot" "[]" || true
+  set_key_if_exists "${SCHEMA}" "window-screenshot" "[]" || true
+  set_key_if_exists "${SCHEMA}" "area-screenshot" "[]" || true
+
+  echo "==> Native GNOME Print Screen bindings disabled"
+}
+
+restore_native_print_keys() {
+  if ! command -v gsettings >/dev/null 2>&1; then
+    echo "NOTE: gsettings not available; cannot restore native Print bindings."
+    return 0
+  fi
+
+  reset_key_if_exists "${SHELL_SCHEMA}" "show-screenshot" || true
+  reset_key_if_exists "${SHELL_SCHEMA}" "show-screenshot-ui" || true
+  reset_key_if_exists "${SHELL_SCHEMA}" "show-screen-recording-ui" || true
+
+  reset_key_if_exists "${SCHEMA}" "screenshot" || true
+  reset_key_if_exists "${SCHEMA}" "window-screenshot" || true
+  reset_key_if_exists "${SCHEMA}" "area-screenshot" || true
+
+  echo "==> Native GNOME Print Screen bindings restored"
+}
+
 configure_gnome_shortcut() {
   local binding="$1"
 
@@ -78,7 +202,7 @@ configure_gnome_shortcut() {
     return 0
   fi
 
-  if ! gsettings list-schemas | grep -qx "${SCHEMA}"; then
+  if ! schema_exists "${SCHEMA}"; then
     echo "NOTE: GNOME media-keys schema not found; skipping shortcut setup."
     return 0
   fi
@@ -89,25 +213,11 @@ configure_gnome_shortcut() {
 
   echo "==> Configuring GNOME custom shortcut: ${binding}"
 
-  local existing
-  existing="$(gsettings get "${SCHEMA}" "${KEY}")"
-
   local path_array=()
-  mapfile -t path_array < <(printf '%s\n' "${existing}" | grep -oE "'${BASE_PATH}/custom[0-9]+/'" | tr -d "'" || true)
+  mapfile -t path_array < <(get_custom_paths)
 
   local target_path=""
-  local p current_name current_command
-  for p in "${path_array[@]}"; do
-    current_name="$(gsettings get "${CUSTOM_SCHEMA}:${p}" name 2>/dev/null || true)"
-    current_command="$(gsettings get "${CUSTOM_SCHEMA}:${p}" command 2>/dev/null || true)"
-    current_name="$(strip_single_quotes "${current_name}")"
-    current_command="$(strip_single_quotes "${current_command}")"
-
-    if [[ "${current_name}" == "${APP_NAME}" || "${current_command}" == "${WRAPPER_PATH} --capture" ]]; then
-      target_path="${p}"
-      break
-    fi
-  done
+  target_path="$(find_screenux_path || true)"
 
   if [[ -z "${target_path}" ]]; then
     local idx=0
@@ -137,13 +247,52 @@ configure_gnome_shortcut() {
 }
 
 main() {
-  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    usage
+  local use_print_screen="false"
+  local restore_native_print="false"
+  local positional=()
+  while (($# > 0)); do
+    case "$1" in
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      --print-screen)
+        use_print_screen="true"
+        ;;
+      --restore-native-print)
+        restore_native_print="true"
+        ;;
+      --)
+        shift
+        while (($# > 0)); do
+          positional+=("$1")
+          shift
+        done
+        break
+        ;;
+      -*)
+        fail "Unknown option: $1"
+        ;;
+      *)
+        positional+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  if [[ "${restore_native_print}" == "true" ]]; then
+    remove_screenux_shortcut
+    restore_native_print_keys
+    echo "==> Done. Native Print Screen behavior restored (GNOME)."
     exit 0
   fi
 
-  local flatpak_file="${1:-}"
-  local keybinding="${2:-['<Control><Shift>s']}"
+  local flatpak_file="${positional[0]:-}"
+  local keybinding="${positional[1]:-['<Control><Shift>s']}"
+
+  if [[ "${use_print_screen}" == "true" ]]; then
+    keybinding="['Print']"
+  fi
 
   [[ -n "${flatpak_file}" ]] || fail "Provide the .flatpak bundle path as first argument."
   [[ -f "${flatpak_file}" ]] || fail "File not found: ${flatpak_file}"
@@ -180,6 +329,10 @@ Categories=Utility;Graphics;
 EOF
 
   configure_gnome_shortcut "${keybinding}"
+
+  if [[ "${keybinding}" == "['Print']" ]]; then
+    disable_native_print_keys
+  fi
 
   echo "==> Done."
   echo "Run:"
