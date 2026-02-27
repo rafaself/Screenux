@@ -217,6 +217,7 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         settings = Gtk.Settings.get_default()
         if settings is not None:
             settings.connect("notify::gtk-application-prefer-dark-theme", self._on_theme_changed)
+            settings.connect("notify::gtk-theme-name", self._on_theme_changed)
 
         def _load_svg_icon(image: Gtk.Image, icon_path: Path) -> None:
             if not icon_path.is_file():
@@ -309,7 +310,11 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
 
     def _toolbar_icon_color(self) -> str:
         settings = Gtk.Settings.get_default()
-        is_dark = bool(settings.get_property("gtk-application-prefer-dark-theme")) if settings else False
+        is_dark = False
+        if settings is not None:
+            prefers_dark = bool(settings.get_property("gtk-application-prefer-dark-theme"))
+            theme_name = str(settings.get_property("gtk-theme-name") or "").lower()
+            is_dark = prefers_dark or ("dark" in theme_name)
         return "#F5F7FA" if is_dark else "#111318"
 
     def _on_theme_changed(self, *_args) -> None:
