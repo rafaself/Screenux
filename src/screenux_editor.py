@@ -27,6 +27,29 @@ _ZOOM_MAX = 20.0
 _ZOOM_BUTTON_STEP = 1.25
 _ZOOM_SCROLL_STEP = 1.15
 _ZOOM_PRESETS = (0.33, 0.5, 1.0, 1.33, 2.0, 5.0, 10.0, 15.0, 20.0)
+_ICON_COLOR_LIGHT = "#111318"
+_ICON_COLOR_DARK = "#F5F7FA"
+
+
+def _toolbar_icon_variant_from_settings(settings: Any | None) -> str:
+    is_dark = False
+    if settings is not None:
+        prefers_dark = bool(settings.get_property("gtk-application-prefer-dark-theme"))
+        theme_name = str(settings.get_property("gtk-theme-name") or "").lower()
+        is_dark = prefers_dark or ("dark" in theme_name)
+    return "dark" if is_dark else "light"
+
+
+def _toolbar_icon_color_from_variant(variant: str) -> str:
+    return _ICON_COLOR_DARK if variant == "dark" else _ICON_COLOR_LIGHT
+
+
+def _tool_icon_candidates(icon_dir: Path, icon_name: str, variant: str) -> list[Path]:
+    return [
+        icon_dir / f"{icon_name}-{variant}.png",
+        icon_dir / f"{icon_name}.png",
+        icon_dir / f"{icon_name}.svg",
+    ]
 
 
 def load_image_surface(file_path: str):
@@ -273,8 +296,8 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         toolbar.set_margin_start(8)
         toolbar.set_margin_end(8)
         toolbar.set_margin_top(8)
-        icon_dir = Path(__file__).resolve().parent / "icons"
-        self._tool_icon_bindings: list[tuple[Gtk.Image, Path, str]] = []
+        self._icon_dir = Path(__file__).resolve().parent / "icons"
+        self._tool_icon_bindings: list[tuple[Gtk.ToggleButton, Gtk.Image, str, str]] = []
 
         settings = Gtk.Settings.get_default()
         if settings is not None:
@@ -283,15 +306,11 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
 
         def _tool_btn(icon_file: str, fallback_label: str, tooltip: str, tool_name: str) -> Gtk.ToggleButton:
             btn = Gtk.ToggleButton()
-            icon_path = icon_dir / icon_file
+            icon_name = Path(icon_file).stem
             image = Gtk.Image()
             image.set_pixel_size(18)
-            if icon_path.is_file():
-                self._load_svg_icon(image, icon_path)
-                btn.set_child(image)
-                self._tool_icon_bindings.append((image, icon_path, fallback_label))
-            else:
-                btn.set_child(Gtk.Label(label=fallback_label))
+            self._set_tool_button_icon(btn, image, icon_name, fallback_label)
+            self._tool_icon_bindings.append((btn, image, icon_name, fallback_label))
             btn.set_tooltip_text(tooltip)
             btn.connect("toggled", self._on_tool_toggled, tool_name)
             return btn
@@ -381,13 +400,48 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         self.append(toolbar)
 
     def _toolbar_icon_color(self) -> str:
+        return _toolbar_icon_color_from_variant(self._toolbar_icon_variant())
+
+    def _toolbar_icon_variant(self) -> str:
         settings = Gtk.Settings.get_default()
-        is_dark = False
-        if settings is not None:
-            prefers_dark = bool(settings.get_property("gtk-application-prefer-dark-theme"))
-            theme_name = str(settings.get_property("gtk-theme-name") or "").lower()
-            is_dark = prefers_dark or ("dark" in theme_name)
-        return "#F5F7FA" if is_dark else "#111318"
+        return _toolbar_icon_variant_from_settings(settings)
+
+    def _set_tool_button_icon(
+        self,
+        button: Gtk.ToggleButton,
+        image: Gtk.Image,
+        icon_name: str,
+        fallback_label: str,
+    ) -> None:
+        if self._load_tool_icon(image, icon_name):
+            if button.get_child() is not image:
+                button.set_child(image)
+            return
+        button.set_child(Gtk.Label(label=fallback_label))
+
+    def _load_tool_icon(self, image: Gtk.Image, icon_name: str) -> bool:
+        variant = self._toolbar_icon_variant()
+        for icon_path in _tool_icon_candidates(self._icon_dir, icon_name, variant):
+            if icon_path.suffix == ".png":
+                if self._load_png_icon(image, icon_path):
+                    return True
+                continue
+            if icon_path.suffix == ".svg" and self._load_svg_icon(image, icon_path):
+                return True
+        image.set_from_icon_name(None)
+        return False
+
+    def _load_png_icon(self, image: Gtk.Image, icon_path: Path) -> bool:
+        if not icon_path.is_file():
+            return False
+        try:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file(str(icon_path))
+            texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+            image.set_from_paintable(texture)
+            return True
+        except Exception:
+            image.set_from_icon_name(None)
+            return False
 
     def _on_theme_changed(self, *_args) -> None:
         self._refresh_tool_icons()
@@ -414,8 +468,8 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
             return False
 
     def _refresh_tool_icons(self) -> None:
-        for image, icon_path, _fallback in getattr(self, "_tool_icon_bindings", []):
-            self._load_svg_icon(image, icon_path)
+        for button, image, icon_name, fallback_label in getattr(self, "_tool_icon_bindings", []):
+            self._set_tool_button_icon(button, image, icon_name, fallback_label)
 
     def _build_canvas(self) -> None:
         self._drawing_area = Gtk.DrawingArea()
