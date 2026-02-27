@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import suppress
 import io as _io
 import math
 import os
@@ -158,10 +159,8 @@ def _write_surface_png_securely(surface, dest: Path) -> None:
             handle.flush()
             os.fsync(handle.fileno())
     except Exception:
-        try:
+        with suppress(OSError):
             destination.unlink(missing_ok=True)
-        except Exception:
-            pass
         raise
 
 
