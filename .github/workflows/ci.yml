@@ -157,6 +157,99 @@ jobs:
       - name: Run tests
         run: pytest -q
 
+  deb-package-assurance:
+    name: Debian Package Assurance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Debian package via Docker
+        run: |
+          set -euo pipefail
+          mkdir -p dist-deb artifacts
+          docker build -f Dockerfile.deb -t screenux-deb-ci .
+          docker run --rm -v "$PWD/dist-deb:/out" screenux-deb-ci
+
+      - name: Verify Debian package integrity, security, and performance budget
+        run: |
+          set -euo pipefail
+
+          deb_file="$(find dist-deb -maxdepth 1 -type f -name 'screenux-screenshot_*_amd64.deb' | head -n 1)"
+          [[ -n "${deb_file}" ]] || { echo "::error::Missing .deb artifact in dist-deb/"; exit 1; }
+
+          dpkg-deb --info "$deb_file" | tee artifacts/deb-info.txt
+          dpkg-deb --contents "$deb_file" | tee artifacts/deb-contents.txt
+          sha256sum "$deb_file" | tee artifacts/deb.sha256
+
+          pkg_name="$(dpkg-deb -f "$deb_file" Package)"
+          pkg_arch="$(dpkg-deb -f "$deb_file" Architecture)"
+          [[ "${pkg_name}" == "screenux-screenshot" ]] || { echo "::error::Unexpected package name: ${pkg_name}"; exit 1; }
+          [[ "${pkg_arch}" == "amd64" ]] || { echo "::error::Unexpected package architecture: ${pkg_arch}"; exit 1; }
+
+          grep -Eq '/usr/bin/screenux-screenshot$' artifacts/deb-contents.txt || { echo "::error::Missing /usr/bin install path"; exit 1; }
+          grep -Eq '/usr/share/applications/screenux-screenshot.desktop$' artifacts/deb-contents.txt || { echo "::error::Missing desktop entry install path"; exit 1; }
+          grep -Eq '/usr/share/icons/hicolor/256x256/apps/screenux-screenshot.png$' artifacts/deb-contents.txt || { echo "::error::Missing icon install path"; exit 1; }
+
+          extract_dir="$(mktemp -d)"
+          trap 'rm -rf "${extract_dir}"' EXIT
+          dpkg-deb -x "$deb_file" "$extract_dir"
+
+          if find "$extract_dir" -type f -perm /6000 | grep -q .; then
+            echo "::error::Setuid/setgid files are not allowed in the .deb payload."
+            exit 1
+          fi
+
+          if find "$extract_dir" -type f -perm -0002 | grep -q .; then
+            echo "::error::World-writable files are not allowed in the .deb payload."
+            exit 1
+          fi
+
+          binary="$extract_dir/usr/bin/screenux-screenshot"
+          [[ -x "${binary}" ]] || { echo "::error::Packaged binary is missing or not executable."; exit 1; }
+
+          help_output="$("$binary" --help 2>&1)"
+          printf '%s\n' "$help_output" > artifacts/help-output.txt
+          printf '%s\n' "$help_output" | grep -F "Usage: screenux-screenshot [--capture] [--help] [--version]" > /dev/null
+
+          if printf '%s\n' "$help_output" | grep -Eq 'Failed to load shared library|Missing GTK4/PyGObject dependencies'; then
+            echo "::error::Deb binary reports GTK/Cairo runtime dependency failures."
+            exit 1
+          fi
+
+          version_output="$("$binary" --version 2>&1)"
+          printf '%s\n' "$version_output" > artifacts/version-output.txt
+          printf '%s\n' "$version_output" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' > /dev/null
+
+          deb_size_bytes="$(stat -c '%s' "$deb_file")"
+          max_deb_size_bytes="$((80 * 1024 * 1024))"
+          echo "deb_size_bytes=${deb_size_bytes}" | tee artifacts/deb-metrics.txt
+          echo "max_deb_size_bytes=${max_deb_size_bytes}" | tee -a artifacts/deb-metrics.txt
+          (( deb_size_bytes <= max_deb_size_bytes )) || { echo "::error::.deb exceeds size budget (${deb_size_bytes} > ${max_deb_size_bytes})"; exit 1; }
+
+          max_help_startup_ms=4000
+          start_ns="$(date +%s%N)"
+          "$binary" --help >/dev/null 2>&1
+          end_ns="$(date +%s%N)"
+          help_startup_ms="$(( (end_ns - start_ns) / 1000000 ))"
+          echo "help_startup_ms=${help_startup_ms}" | tee -a artifacts/deb-metrics.txt
+          echo "max_help_startup_ms=${max_help_startup_ms}" | tee -a artifacts/deb-metrics.txt
+          (( help_startup_ms <= max_help_startup_ms )) || { echo "::error::Help startup time exceeded budget (${help_startup_ms}ms > ${max_help_startup_ms}ms)"; exit 1; }
+
+      - name: Upload Debian CI reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-ci-reports
+          path: |
+            artifacts/deb-info.txt
+            artifacts/deb-contents.txt
+            artifacts/deb.sha256
+            artifacts/deb-metrics.txt
+            artifacts/help-output.txt
+            artifacts/version-output.txt
+
   build-verification:
     name: Build & Packaging Verification
     runs-on: ubuntu-latest

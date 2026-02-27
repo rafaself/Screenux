@@ -201,6 +201,7 @@ Quality gates include:
 - Shell script hardening (`ShellCheck`, `shfmt`, policy checks, installer SHA256 artifact)
 - Dependency checks (`pip check`, dependency review action)
 - Build/package validation (launcher, Flatpak manifest, desktop entry, Docker Compose, Docker build)
+- Debian package assurance (Docker `.deb` build, control/path integrity checks, no setuid/setgid/world-writable payload files, SHA256 report, startup/size budget checks)
 
 Release artifacts workflow: `.github/workflows/release-artifacts.yml`
 
