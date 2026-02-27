@@ -54,15 +54,15 @@ key_exists() {
 get_custom_paths() {
   local existing
   existing="$(gsettings get "${SCHEMA}" "${KEY}")"
-  grep -oE "'${BASE_PATH}/custom[0-9]+/'" <<<"${existing}" | tr -d "'" || true
+  grep -oE "'${BASE_PATH}/custom[0-9]+/'" <<< "${existing}" | tr -d "'" || true
 }
 
 find_screenux_path() {
   local p current_name current_command
   while IFS= read -r p; do
     [[ -n "${p}" ]] || continue
-    current_name="$(gsettings get "${CUSTOM_SCHEMA}:${p}" name 2>/dev/null || true)"
-    current_command="$(gsettings get "${CUSTOM_SCHEMA}:${p}" command 2>/dev/null || true)"
+    current_name="$(gsettings get "${CUSTOM_SCHEMA}:${p}" name 2> /dev/null || true)"
+    current_command="$(gsettings get "${CUSTOM_SCHEMA}:${p}" command 2> /dev/null || true)"
     current_name="$(strip_single_quotes "${current_name}")"
     current_command="$(strip_single_quotes "${current_command}")"
     if [[ "${current_name}" == "${APP_NAME}" || "${current_command}" == "${WRAPPER_PATH} --capture" ]]; then
@@ -74,7 +74,7 @@ find_screenux_path() {
 }
 
 remove_screenux_shortcut() {
-  if ! command -v gsettings >/dev/null 2>&1; then
+  if ! command -v gsettings > /dev/null 2>&1; then
     return 0
   fi
   if ! schema_exists "${SCHEMA}"; then
@@ -122,7 +122,7 @@ reset_key_if_exists() {
 }
 
 disable_native_print_keys() {
-  if ! command -v gsettings >/dev/null 2>&1; then
+  if ! command -v gsettings > /dev/null 2>&1; then
     echo "NOTE: gsettings not available; cannot disable native Print bindings."
     return 0
   fi
@@ -139,7 +139,7 @@ disable_native_print_keys() {
 }
 
 restore_native_print_keys() {
-  if ! command -v gsettings >/dev/null 2>&1; then
+  if ! command -v gsettings > /dev/null 2>&1; then
     echo "NOTE: gsettings not available; cannot restore native Print bindings."
     return 0
   fi
@@ -158,7 +158,7 @@ restore_native_print_keys() {
 configure_gnome_shortcut() {
   local binding="$1"
 
-  if ! command -v gsettings >/dev/null 2>&1; then
+  if ! command -v gsettings > /dev/null 2>&1; then
     echo "NOTE: gsettings not available; skipping shortcut setup."
     return 0
   fi

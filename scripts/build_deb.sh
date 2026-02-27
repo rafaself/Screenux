@@ -48,7 +48,7 @@ rm -rf -- "${ROOT_DIR}/build" "${ROOT_DIR}/dist" "${ROOT_DIR}/${APP_NAME}.spec"
   "${ROOT_DIR}/src/screenux_screenshot.py"
 
 mkdir -p "${DEBIAN_DIR}"
-cat > "${DEBIAN_DIR}/control" <<EOF
+cat > "${DEBIAN_DIR}/control" << EOF
 Package: ${APP_NAME}
 Version: ${APP_VERSION}
 Section: utils
