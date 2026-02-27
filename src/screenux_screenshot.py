@@ -139,6 +139,17 @@ def format_status_saved(path: Path) -> str:
     return f"Saved: {path}"
 
 
+def _parse_cli_args(argv: list[str]) -> tuple[list[str], bool]:
+    filtered = [argv[0]] if argv else []
+    auto_capture = False
+    for arg in argv[1:]:
+        if arg == "--capture":
+            auto_capture = True
+            continue
+        filtered.append(arg)
+    return filtered, auto_capture
+
+
 MainWindow = None
 if Gtk is not None:
     try:
@@ -149,8 +160,13 @@ if Gtk is not None:
 
 if Gtk is not None:
     class ScreenuxScreenshotApp(Gtk.Application):  # type: ignore[misc]
-        def __init__(self) -> None:
+        def __init__(self, auto_capture: bool = False) -> None:
             super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
+            self._auto_capture_pending = auto_capture
+
+        def _trigger_auto_capture(self, window: MainWindow) -> bool:
+            window.take_screenshot()
+            return False
 
         def do_activate(self) -> None:
             window = self.props.active_window
@@ -164,6 +180,9 @@ if Gtk is not None:
                     format_status_saved=format_status_saved,
                 )
             window.present()
+            if self._auto_capture_pending:
+                self._auto_capture_pending = False
+                GLib.idle_add(self._trigger_auto_capture, window)
 else:
     class ScreenuxScreenshotApp:  # pragma: no cover
         def run(self, _argv: list[str]) -> int:
@@ -175,8 +194,9 @@ def main(argv: list[str]) -> int:
     if GI_IMPORT_ERROR is not None or Gtk is None or MainWindow is None:
         print(f"Missing GTK4/PyGObject dependencies: {GI_IMPORT_ERROR}", file=sys.stderr)
         return 1
-    app = ScreenuxScreenshotApp()
-    return app.run(argv)
+    app_argv, auto_capture = _parse_cli_args(argv)
+    app = ScreenuxScreenshotApp(auto_capture=auto_capture)
+    return app.run(app_argv)
 
 
 if __name__ == "__main__":

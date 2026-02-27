@@ -89,7 +89,7 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         self._main_box.set_margin_end(16)
 
         self._button = Gtk.Button(label="Take Screenshot")
-        self._button.connect("clicked", self._on_take_screenshot)
+        self._button.connect("clicked", lambda _button: self.take_screenshot())
         self._main_box.append(self._button)
 
         self._status_label = Gtk.Label(label="Ready")
@@ -111,6 +111,9 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
 
         self._main_box.append(folder_row)
         self.set_child(self._main_box)
+
+    def take_screenshot(self) -> None:
+        self._on_take_screenshot(self._button)
 
     def _build_handle_token(self) -> str:
         self._request_counter += 1

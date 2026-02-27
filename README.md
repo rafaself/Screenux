@@ -31,6 +31,8 @@ Optional GNOME Print Screen shortcut:
 ./install-screenux.sh --bundle /path/to/screenux-screenshot.flatpak --print-screen
 ```
 
+This maps `Print` to `screenux-screenshot --capture`, which opens Screenux and immediately starts the capture flow.
+
 If Screenux is already installed for your user, you can rerun:
 
 ```bash
