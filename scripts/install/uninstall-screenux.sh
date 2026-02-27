@@ -33,6 +33,8 @@ remove_flatpak_app() {
 cleanup_local_entries() {
   remove_wrapper
   remove_desktop_entry
+  remove_icon_asset
+  refresh_icon_cache
 }
 
 cleanup_shortcuts() {
@@ -51,6 +53,7 @@ validate_uninstall() {
 
   [[ ! -e "${WRAPPER_PATH}" && ! -L "${WRAPPER_PATH}" ]] || fail "Validation failed: wrapper still exists at ${WRAPPER_PATH}"
   [[ ! -e "${DESKTOP_FILE}" && ! -L "${DESKTOP_FILE}" ]] || fail "Validation failed: desktop entry still exists at ${DESKTOP_FILE}"
+  [[ ! -e "${ICON_FILE}" && ! -L "${ICON_FILE}" ]] || fail "Validation failed: icon asset still exists at ${ICON_FILE}"
 
   if [[ "${preserve_user_data}" == "false" && -d "${APP_DATA_DIR}" ]]; then
     fail "Validation failed: user data still exists at ${APP_DATA_DIR}"

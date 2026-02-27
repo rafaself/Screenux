@@ -162,6 +162,7 @@ if Gtk is not None:
     class ScreenuxScreenshotApp(Gtk.Application):  # type: ignore[misc]
         def __init__(self, auto_capture: bool = False) -> None:
             super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
+            Gtk.Window.set_default_icon_name(APP_ID)
             self._auto_capture_pending = auto_capture
 
         def _trigger_auto_capture(self, window: MainWindow) -> bool:

@@ -70,6 +70,7 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         format_status_saved: Callable[[Path], str],
     ):
         super().__init__(application=app, title="Screenux Screenshot")
+        self.set_icon_name(app.get_application_id() or "application-default-icon")
         self.set_default_size(360, 180)
 
         self._resolve_save_dir = resolve_save_dir

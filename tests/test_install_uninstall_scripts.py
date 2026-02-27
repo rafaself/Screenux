@@ -167,6 +167,7 @@ class InstallScriptTests(unittest.TestCase):
 
         wrapper_path = Path(env["HOME"]) / ".local/bin/screenux-screenshot"
         desktop_file = Path(env["HOME"]) / f".local/share/applications/{APP_ID}.desktop"
+        icon_file = Path(env["HOME"]) / f".local/share/icons/hicolor/scalable/apps/{APP_ID}.svg"
 
         self.assertTrue(wrapper_path.exists())
         self.assertTrue(os.access(wrapper_path, os.X_OK))
@@ -177,6 +178,7 @@ class InstallScriptTests(unittest.TestCase):
             f"Exec={wrapper_path}",
             desktop_file.read_text(encoding="utf-8"),
         )
+        self.assertTrue(icon_file.exists())
 
     def test_installer_skips_bundle_install_when_app_already_installed(self):
         _, env, log_file = _setup_mock_environment(installed=True)
@@ -215,6 +217,7 @@ class UninstallScriptTests(unittest.TestCase):
         )
         wrapper_path = Path(env["HOME"]) / ".local/bin/screenux-screenshot"
         desktop_file = Path(env["HOME"]) / f".local/share/applications/{APP_ID}.desktop"
+        icon_file = Path(env["HOME"]) / f".local/share/icons/hicolor/scalable/apps/{APP_ID}.svg"
         data_dir = Path(env["HOME"]) / f".var/app/{APP_ID}"
         data_dir.mkdir(parents=True, exist_ok=True)
         (data_dir / "config.json").write_text("{}", encoding="utf-8")
@@ -222,6 +225,8 @@ class UninstallScriptTests(unittest.TestCase):
         wrapper_path.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
         desktop_file.parent.mkdir(parents=True, exist_ok=True)
         desktop_file.write_text("[Desktop Entry]\n", encoding="utf-8")
+        icon_file.parent.mkdir(parents=True, exist_ok=True)
+        icon_file.write_text("<svg/>", encoding="utf-8")
 
         result = _run_command([str(UNINSTALLER)], env)
         log = log_file.read_text(encoding="utf-8")
@@ -230,6 +235,7 @@ class UninstallScriptTests(unittest.TestCase):
         self.assertIn(f"flatpak uninstall -y --user {APP_ID}", log)
         self.assertFalse(wrapper_path.exists())
         self.assertFalse(desktop_file.exists())
+        self.assertFalse(icon_file.exists())
         self.assertFalse(data_dir.exists())
         self.assertIn(
             "gsettings reset org.gnome.shell.keybindings show-screenshot",

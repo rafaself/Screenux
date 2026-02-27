@@ -18,12 +18,15 @@ Screenux focuses on a clean capture flow: take a screenshot, optionally annotate
 - Built-in editor for quick annotations (shapes/text)
 - Editor zoom controls with `Best fit` and quick presets (`33%` to `2000%`)
 - Timestamped output names with safe, non-overwriting writes
+- Packaged app icon for desktop launcher integration
 
 ## Install
 
 ```bash
 ./install-screenux.sh --bundle /path/to/screenux-screenshot.flatpak
 ```
+
+The installer creates a desktop entry and installs the app icon at `~/.local/share/icons/hicolor/scalable/apps/io.github.rafa.ScreenuxScreenshot.svg` so launcher/taskbar icon lookup works reliably. It also refreshes the local icon cache when GTK cache tools are available.
 
 Optional GNOME Print Screen shortcut:
 

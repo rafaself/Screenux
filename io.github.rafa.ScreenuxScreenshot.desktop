@@ -1,6 +1,7 @@
 [Desktop Entry]
 Name=Screenux Screenshot
 Exec=screenux-screenshot
+Icon=io.github.rafa.ScreenuxScreenshot
 Type=Application
 Terminal=false
 Categories=Utility;Graphics;

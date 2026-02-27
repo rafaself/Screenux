@@ -7,8 +7,12 @@ WRAPPER_DIR="${HOME}/.local/bin"
 WRAPPER_PATH="${WRAPPER_DIR}/screenux-screenshot"
 DESKTOP_DIR="${HOME}/.local/share/applications"
 DESKTOP_FILE="${DESKTOP_DIR}/${APP_ID}.desktop"
+ICON_DIR="${HOME}/.local/share/icons/hicolor/scalable/apps"
+ICON_FILE="${ICON_DIR}/${APP_ID}.svg"
 APP_DATA_DIR="${HOME}/.var/app/${APP_ID}"
 DEFAULT_BUNDLE_NAME="screenux-screenshot.flatpak"
+COMMON_LIB_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+APP_ICON_SOURCE="${COMMON_LIB_DIR}/../../../assets/icons/${APP_ID}.svg"
 
 DEFAULT_KEYBINDING="['<Control><Shift>s']"
 PRINT_KEYBINDING="['Print']"
@@ -55,6 +59,13 @@ Categories=Utility;Graphics;
 EOF
 }
 
+create_icon_asset() {
+  [[ -f "${APP_ICON_SOURCE}" ]] || fail "App icon source file not found: ${APP_ICON_SOURCE}"
+  echo "==> Installing app icon: ${ICON_FILE}"
+  mkdir -p "${ICON_DIR}"
+  cp -f -- "${APP_ICON_SOURCE}" "${ICON_FILE}"
+}
+
 remove_wrapper() {
   if [[ -e "${WRAPPER_PATH}" || -L "${WRAPPER_PATH}" ]]; then
     echo "==> Removing wrapper command: ${WRAPPER_PATH}"
@@ -69,9 +80,32 @@ remove_desktop_entry() {
   fi
 }
 
+remove_icon_asset() {
+  if [[ -e "${ICON_FILE}" || -L "${ICON_FILE}" ]]; then
+    echo "==> Removing app icon: ${ICON_FILE}"
+    rm -f -- "${ICON_FILE}"
+  fi
+}
+
 remove_app_data() {
   if [[ -d "${APP_DATA_DIR}" ]]; then
     echo "==> Removing user data: ${APP_DATA_DIR}"
     rm -rf -- "${APP_DATA_DIR}"
+  fi
+}
+
+refresh_icon_cache() {
+  local icon_theme_root="${HOME}/.local/share/icons/hicolor"
+  if [[ ! -d "${icon_theme_root}" ]]; then
+    return 0
+  fi
+
+  if command -v gtk4-update-icon-cache >/dev/null 2>&1; then
+    gtk4-update-icon-cache -f -t "${icon_theme_root}" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -f -t "${icon_theme_root}" >/dev/null 2>&1 || true
   fi
 }

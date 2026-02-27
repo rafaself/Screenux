@@ -20,7 +20,8 @@
         "install -Dm755 src/screenux_screenshot.py /app/share/screenux/screenux_screenshot.py",
         "install -Dm755 src/screenux_editor.py /app/share/screenux/screenux_editor.py",
         "install -Dm755 src/screenux_window.py /app/share/screenux/screenux_window.py",
-        "install -Dm644 io.github.rafa.ScreenuxScreenshot.desktop /app/share/applications/io.github.rafa.ScreenuxScreenshot.desktop"
+        "install -Dm644 io.github.rafa.ScreenuxScreenshot.desktop /app/share/applications/io.github.rafa.ScreenuxScreenshot.desktop",
+        "install -Dm644 assets/icons/io.github.rafa.ScreenuxScreenshot.svg /app/share/icons/hicolor/scalable/apps/io.github.rafa.ScreenuxScreenshot.svg"
       ],
       "sources": [
         {

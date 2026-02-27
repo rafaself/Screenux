@@ -63,6 +63,8 @@ install_bundle() {
 
   create_wrapper
   create_desktop_entry
+  create_icon_asset
+  refresh_icon_cache
 }
 
 validate_installation() {
@@ -73,6 +75,7 @@ validate_installation() {
   fi
   [[ -x "${WRAPPER_PATH}" ]] || fail "Validation failed: wrapper not executable at ${WRAPPER_PATH}"
   [[ -f "${DESKTOP_FILE}" ]] || fail "Validation failed: desktop entry missing at ${DESKTOP_FILE}"
+  [[ -f "${ICON_FILE}" ]] || fail "Validation failed: icon asset missing at ${ICON_FILE}"
 }
 
 configure_shortcut() {
