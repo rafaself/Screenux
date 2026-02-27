@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Callable
 
-DEFAULT_SHORTCUT = "Ctrl+Shift+S"
-FALLBACK_SHORTCUTS = ("Ctrl+Alt+S", "Alt+Shift+S", "Super+Shift+S")
+DEFAULT_SHORTCUT = "Ctrl+Print"
+FALLBACK_SHORTCUTS = ("Ctrl+Shift+S", "Ctrl+Alt+S", "Alt+Shift+S", "Super+Shift+S")
 HOTKEY_CONFIG_KEY = "global_hotkey"
 
 GNOME_MEDIA_SCHEMA = "org.gnome.settings-daemon.plugins.media-keys"
@@ -83,6 +83,9 @@ def _normalize_key_token(token: str) -> str:
 
     upper = text.upper()
     if upper == "PRINT":
+        return "Print"
+    compact = re.sub(r"[\s_-]+", "", upper)
+    if compact in {"PRINTSCREEN", "PRTSC", "PRTSCN"}:
         return "Print"
     if upper.startswith("F") and upper[1:].isdigit():
         return upper

@@ -19,6 +19,7 @@ class PackagingIconMetadataTests(unittest.TestCase):
 
         build_commands = manifest["modules"][0]["build-commands"]
         expected_targets = (
+            f"/app/share/icons/hicolor/256x256/apps/{APP_ID}.png",
             f"/app/share/icons/hicolor/scalable/apps/{APP_ID}.svg",
             f"/app/share/icons/hicolor/scalable/apps/{APP_ID}-light.svg",
             f"/app/share/icons/hicolor/scalable/apps/{APP_ID}-dark.svg",
@@ -27,6 +28,7 @@ class PackagingIconMetadataTests(unittest.TestCase):
             self.assertTrue(any(command.endswith(f" {target}") for command in build_commands))
 
         icon_files = (
+            ROOT / "assets" / "icons" / f"{APP_ID}.png",
             ROOT / "assets" / "icons" / f"{APP_ID}.svg",
             ROOT / "assets" / "icons" / f"{APP_ID}-light.svg",
             ROOT / "assets" / "icons" / f"{APP_ID}-dark.svg",

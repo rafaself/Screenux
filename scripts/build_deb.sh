@@ -8,6 +8,7 @@ APP_NAME="${APP_NAME:-screenux-screenshot}"
 APP_VERSION="${APP_VERSION:-0.1.0}"
 APP_ARCH="${APP_ARCH:-amd64}"
 OUT_DIR="${OUT_DIR:-/out}"
+APP_ID="${APP_ID:-io.github.rafa.ScreenuxScreenshot}"
 
 BUILD_WORKDIR="$(mktemp -d -t "${APP_NAME}-deb-XXXXXX")"
 PKG_ROOT="${BUILD_WORKDIR}/pkg"
@@ -66,8 +67,17 @@ install -Dm644 \
   "${ROOT_DIR}/packaging/linux/${APP_NAME}.desktop" \
   "${PKG_ROOT}/usr/share/applications/${APP_NAME}.desktop"
 install -Dm644 \
-  "${ROOT_DIR}/packaging/linux/${APP_NAME}.png" \
-  "${PKG_ROOT}/usr/share/icons/hicolor/256x256/apps/${APP_NAME}.png"
+  "${ROOT_DIR}/assets/icons/${APP_ID}.png" \
+  "${PKG_ROOT}/usr/share/icons/hicolor/256x256/apps/${APP_ID}.png"
+install -Dm644 \
+  "${ROOT_DIR}/assets/icons/${APP_ID}.svg" \
+  "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/${APP_ID}.svg"
+install -Dm644 \
+  "${ROOT_DIR}/assets/icons/${APP_ID}-light.svg" \
+  "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/${APP_ID}-light.svg"
+install -Dm644 \
+  "${ROOT_DIR}/assets/icons/${APP_ID}-dark.svg" \
+  "${PKG_ROOT}/usr/share/icons/hicolor/scalable/apps/${APP_ID}-dark.svg"
 
 dpkg-deb --build --root-owner-group "${PKG_ROOT}" "${DEB_FILE}"
 

@@ -172,7 +172,8 @@ class InstallScriptTests(unittest.TestCase):
 
         wrapper_path = Path(env["HOME"]) / ".local/bin/screenux-screenshot"
         desktop_file = Path(env["HOME"]) / f".local/share/applications/{APP_ID}.desktop"
-        icon_file = Path(env["HOME"]) / f".local/share/icons/hicolor/scalable/apps/{APP_ID}.svg"
+        icon_file = Path(env["HOME"]) / f".local/share/icons/hicolor/256x256/apps/{APP_ID}.png"
+        icon_file_svg = Path(env["HOME"]) / f".local/share/icons/hicolor/scalable/apps/{APP_ID}.svg"
         icon_file_light = Path(env["HOME"]) / f".local/share/icons/hicolor/scalable/apps/{APP_ID}-light.svg"
         icon_file_dark = Path(env["HOME"]) / f".local/share/icons/hicolor/scalable/apps/{APP_ID}-dark.svg"
 
@@ -186,6 +187,7 @@ class InstallScriptTests(unittest.TestCase):
             desktop_file.read_text(encoding="utf-8"),
         )
         self.assertTrue(icon_file.exists())
+        self.assertTrue(icon_file_svg.exists())
         self.assertTrue(icon_file_light.exists())
         self.assertTrue(icon_file_dark.exists())
 
@@ -231,7 +233,8 @@ class UninstallScriptTests(unittest.TestCase):
         )
         wrapper_path = Path(env["HOME"]) / ".local/bin/screenux-screenshot"
         desktop_file = Path(env["HOME"]) / f".local/share/applications/{APP_ID}.desktop"
-        icon_file = Path(env["HOME"]) / f".local/share/icons/hicolor/scalable/apps/{APP_ID}.svg"
+        icon_file = Path(env["HOME"]) / f".local/share/icons/hicolor/256x256/apps/{APP_ID}.png"
+        icon_file_svg = Path(env["HOME"]) / f".local/share/icons/hicolor/scalable/apps/{APP_ID}.svg"
         icon_file_light = Path(env["HOME"]) / f".local/share/icons/hicolor/scalable/apps/{APP_ID}-light.svg"
         icon_file_dark = Path(env["HOME"]) / f".local/share/icons/hicolor/scalable/apps/{APP_ID}-dark.svg"
         data_dir = Path(env["HOME"]) / f".var/app/{APP_ID}"
@@ -242,7 +245,9 @@ class UninstallScriptTests(unittest.TestCase):
         desktop_file.parent.mkdir(parents=True, exist_ok=True)
         desktop_file.write_text("[Desktop Entry]\n", encoding="utf-8")
         icon_file.parent.mkdir(parents=True, exist_ok=True)
-        icon_file.write_text("<svg/>", encoding="utf-8")
+        icon_file.write_bytes(b"png")
+        icon_file_svg.parent.mkdir(parents=True, exist_ok=True)
+        icon_file_svg.write_text("<svg/>", encoding="utf-8")
         icon_file_light.write_text("<svg/>", encoding="utf-8")
         icon_file_dark.write_text("<svg/>", encoding="utf-8")
 
@@ -254,6 +259,7 @@ class UninstallScriptTests(unittest.TestCase):
         self.assertFalse(wrapper_path.exists())
         self.assertFalse(desktop_file.exists())
         self.assertFalse(icon_file.exists())
+        self.assertFalse(icon_file_svg.exists())
         self.assertFalse(icon_file_light.exists())
         self.assertFalse(icon_file_dark.exists())
         self.assertFalse(data_dir.exists())

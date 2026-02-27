@@ -41,7 +41,7 @@ def test_collect_gnome_taken_shortcuts_parses_custom_and_native_bindings():
         ),
         ("gsettings", "get", f"{hotkey.GNOME_CUSTOM_SCHEMA}:{custom_path}", "binding"): (
             0,
-            "['<Control><Shift>s']\n",
+            "['<Control>Print']\n",
             "",
         ),
         ("gsettings", "get", hotkey.GNOME_SHELL_SCHEMA, "show-screenshot"): (0, "['Print']\n", ""),
@@ -55,7 +55,7 @@ def test_collect_gnome_taken_shortcuts_parses_custom_and_native_bindings():
 
     taken = hotkey.collect_gnome_taken_shortcuts(runner=runner)
 
-    assert "Ctrl+Shift+S" in taken
+    assert "Ctrl+Print" in taken
     assert "Print" in taken
 
 
@@ -94,7 +94,7 @@ def test_register_gnome_shortcut_sets_command_and_uses_fallback_when_conflicting
         ),
         ("gsettings", "get", f"{hotkey.GNOME_CUSTOM_SCHEMA}:{existing_path}", "binding"): (
             0,
-            "['<Control><Shift>s']\n",
+            "['<Control>Print']\n",
             "",
         ),
         ("gsettings", "get", hotkey.GNOME_SHELL_SCHEMA, "show-screenshot"): (0, "[]\n", ""),
@@ -106,9 +106,9 @@ def test_register_gnome_shortcut_sets_command_and_uses_fallback_when_conflicting
     }
     runner = _make_runner(mapping, calls)
 
-    result = hotkey.register_gnome_shortcut("Ctrl+Shift+S", runner=runner)
+    result = hotkey.register_gnome_shortcut("Ctrl+Print", runner=runner)
 
-    assert result.shortcut == "Ctrl+Alt+S"
+    assert result.shortcut == "Ctrl+Shift+S"
     assert result.warning is not None
     assert any(
         command
@@ -128,7 +128,7 @@ def test_register_gnome_shortcut_sets_command_and_uses_fallback_when_conflicting
             "set",
             f"{hotkey.GNOME_CUSTOM_SCHEMA}:{new_path}",
             "binding",
-            "['<Control><Alt>s']",
+            "['<Control><Shift>s']",
         ]
         for command in calls
     )

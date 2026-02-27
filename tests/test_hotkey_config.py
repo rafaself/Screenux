@@ -13,9 +13,9 @@ def test_read_hotkey_uses_default_when_unset():
 
 def test_write_and_read_hotkey_round_trip():
     config = {}
-    hotkey.write_hotkey_to_config(config, "ctrl+shift+s")
-    assert config["global_hotkey"] == "Ctrl+Shift+S"
-    assert hotkey.read_hotkey_from_config(config) == "Ctrl+Shift+S"
+    hotkey.write_hotkey_to_config(config, "ctrl+print screen")
+    assert config["global_hotkey"] == "Ctrl+Print"
+    assert hotkey.read_hotkey_from_config(config) == "Ctrl+Print"
 
 
 def test_write_and_read_disabled_hotkey():

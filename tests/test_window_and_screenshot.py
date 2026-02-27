@@ -25,6 +25,26 @@ class DummyButton:
         self.sensitive = value
 
 
+class DummyEntry:
+    def __init__(self, text=""):
+        self.text = text
+
+    def get_text(self):
+        return self.text
+
+    def set_text(self, text):
+        self.text = text
+
+
+class DummyHotkeyManager:
+    def __init__(self):
+        self.last_applied = None
+
+    def apply_shortcut(self, value):
+        self.last_applied = value
+        return SimpleNamespace(shortcut=value, warning=None)
+
+
 class DummyBus:
     def __init__(self, unique_name=":1.23"):
         self.unique_name = unique_name
@@ -101,6 +121,50 @@ def test_window_take_screenshot_public_method():
     window.MainWindow.take_screenshot(self)
 
     assert called == [self._button]
+
+
+def test_window_hotkey_apply_accepts_printscreen_alias():
+    manager = DummyHotkeyManager()
+    self = SimpleNamespace(
+        _hotkey_manager=manager,
+        _hotkey_entry=DummyEntry("ctrl+print screen"),
+        _set_status=lambda text: setattr(self, "_status_text", text),
+        _apply_hotkey_result=lambda result: setattr(self, "_applied_result", result),
+    )
+    self._status_text = ""
+    self._applied_result = None
+
+    window.MainWindow._on_hotkey_apply(self, None)
+
+    assert manager.last_applied == "ctrl+print screen"
+    assert self._applied_result is not None
+    assert self._applied_result.shortcut == "ctrl+print screen"
+
+
+def test_window_hotkey_restore_default():
+    manager = DummyHotkeyManager()
+    self = SimpleNamespace(
+        _hotkey_manager=manager,
+        _apply_hotkey_result=lambda result: setattr(self, "_applied_result", result),
+    )
+    self._applied_result = None
+
+    window.MainWindow._on_hotkey_restore_default(self, None)
+
+    assert manager.last_applied == "Ctrl+Print"
+    assert self._applied_result is not None
+    assert self._applied_result.shortcut == "Ctrl+Print"
+
+
+def test_window_hotkey_entry_activate_triggers_apply():
+    calls = []
+    self = SimpleNamespace(
+        _on_hotkey_apply=lambda button: calls.append(button),
+    )
+
+    window.MainWindow._on_hotkey_entry_activate(self, "entry")
+
+    assert calls == ["entry"]
 
 
 class DummyError(Exception):

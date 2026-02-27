@@ -27,8 +27,6 @@ except Exception as exc:  # pragma: no cover - handled at runtime
     Gtk = None  # type: ignore[assignment]  # pragma: no cover
 
 APP_ID = "io.github.rafa.ScreenuxScreenshot"
-LIGHT_ICON_NAME = f"{APP_ID}-light"
-DARK_ICON_NAME = f"{APP_ID}-dark"
 _MAX_CONFIG_SIZE = 64 * 1024
 _ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
 APP_VERSION = "0.1.0"
@@ -49,20 +47,8 @@ def _print_help() -> None:
     )
 
 
-def _prefers_dark_theme() -> bool:
-    if Gtk is None:
-        return False
-    settings = Gtk.Settings.get_default()
-    if settings is None:
-        return False
-    try:
-        return bool(settings.get_property("gtk-application-prefer-dark-theme"))
-    except Exception:
-        return False
-
-
 def select_icon_name() -> str:
-    return DARK_ICON_NAME if _prefers_dark_theme() else LIGHT_ICON_NAME
+    return APP_ID
 
 
 def enforce_offline_mode() -> None:

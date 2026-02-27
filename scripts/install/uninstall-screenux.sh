@@ -56,6 +56,7 @@ validate_uninstall() {
   [[ ! -e "${WRAPPER_PATH}" && ! -L "${WRAPPER_PATH}" ]] || fail "Validation failed: wrapper still exists at ${WRAPPER_PATH}"
   [[ ! -e "${DESKTOP_FILE}" && ! -L "${DESKTOP_FILE}" ]] || fail "Validation failed: desktop entry still exists at ${DESKTOP_FILE}"
   [[ ! -e "${ICON_FILE}" && ! -L "${ICON_FILE}" ]] || fail "Validation failed: icon asset still exists at ${ICON_FILE}"
+  [[ ! -e "${ICON_FILE_SVG}" && ! -L "${ICON_FILE_SVG}" ]] || fail "Validation failed: icon asset still exists at ${ICON_FILE_SVG}"
   [[ ! -e "${ICON_FILE_LIGHT}" && ! -L "${ICON_FILE_LIGHT}" ]] || fail "Validation failed: icon asset still exists at ${ICON_FILE_LIGHT}"
   [[ ! -e "${ICON_FILE_DARK}" && ! -L "${ICON_FILE_DARK}" ]] || fail "Validation failed: icon asset still exists at ${ICON_FILE_DARK}"
 

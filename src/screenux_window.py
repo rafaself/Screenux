@@ -12,6 +12,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gio, GLib, Gtk, Pango
 
 from screenux_editor import AnnotationEditor, load_image_surface
+from screenux_hotkey import DEFAULT_SHORTCUT
 
 PORTAL_DEST = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"
@@ -144,12 +145,17 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         edit_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self._hotkey_entry = Gtk.Entry()
         self._hotkey_entry.set_hexpand(True)
-        self._hotkey_entry.set_placeholder_text("Ctrl+Shift+S")
+        self._hotkey_entry.set_placeholder_text(DEFAULT_SHORTCUT)
+        self._hotkey_entry.connect("activate", self._on_hotkey_entry_activate)
         edit_row.append(self._hotkey_entry)
 
         apply_btn = Gtk.Button(label="Apply")
         apply_btn.connect("clicked", self._on_hotkey_apply)
         edit_row.append(apply_btn)
+
+        default_btn = Gtk.Button(label="Default")
+        default_btn.connect("clicked", self._on_hotkey_restore_default)
+        edit_row.append(default_btn)
 
         disable_btn = Gtk.Button(label="Disable")
         disable_btn.connect("clicked", self._on_hotkey_disable)
@@ -189,6 +195,15 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         except ValueError as err:
             self._set_status(f"Failed: invalid shortcut ({err})")
             return
+        self._apply_hotkey_result(result)
+
+    def _on_hotkey_entry_activate(self, _entry: Gtk.Entry) -> None:
+        self._on_hotkey_apply(_entry)
+
+    def _on_hotkey_restore_default(self, _button: Gtk.Button) -> None:
+        if self._hotkey_manager is None:
+            return
+        result = self._hotkey_manager.apply_shortcut(DEFAULT_SHORTCUT)
         self._apply_hotkey_result(result)
 
     def _on_hotkey_disable(self, _button: Gtk.Button) -> None:
