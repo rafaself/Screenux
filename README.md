@@ -9,7 +9,7 @@ Screenux focuses on a clean capture flow: take a screenshot, optionally annotate
 - 🧭 Clean interface with one primary action and clear status messages
 - 🔒 Local-first behavior (no cloud upload flow)
 - 🖼️ Wayland-friendly capture via desktop portal APIs
-- 📁 Practical folder defaults (Desktop, then Home fallback)
+- 📁 Practical folder defaults (`Pictures/Screenshots`, then Home fallback)
 
 ## 🧩 Features
 
@@ -126,8 +126,8 @@ Preserve app data in `~/.var/app/io.github.rafa.ScreenuxScreenshot`:
 
 Save folder behavior:
 
-- Default target is Desktop.
-- If Desktop is unavailable or not writable, Screenux falls back to Home.
+- Default target is `Pictures/Screenshots` (created automatically when possible).
+- If `Pictures/Screenshots` is unavailable or not writable, Screenux falls back to Home.
 - You can change the destination from the app (`Save to` → `Change…`).
 
 Global hotkey behavior:

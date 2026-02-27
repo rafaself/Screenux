@@ -9,34 +9,37 @@ sys.path.insert(0, str(ROOT / "src"))
 import screenux_screenshot as app
 
 
-def test_resolve_save_dir_uses_desktop_when_available(tmp_path, monkeypatch):
-    desktop = tmp_path / "Desktop"
-    desktop.mkdir()
+def test_resolve_save_dir_uses_screenshots_dir_when_available(tmp_path, monkeypatch):
+    pictures = tmp_path / "Pictures"
+    pictures.mkdir()
+    screenshots = pictures / "Screenshots"
     home = tmp_path / "home"
     home.mkdir()
 
     class FakeGLib:
         class UserDirectory:
-            DIRECTORY_DESKTOP = object()
+            DIRECTORY_PICTURES = object()
 
         @staticmethod
         def get_user_special_dir(_directory):
-            return str(desktop)
+            return str(pictures)
 
     monkeypatch.setattr(app, "GLib", FakeGLib)
     monkeypatch.setattr(app, "load_config", lambda: {})
     monkeypatch.setattr(app.Path, "home", staticmethod(lambda: home))
 
-    assert app.resolve_save_dir() == desktop
+    assert app.resolve_save_dir() == screenshots
+    assert screenshots.is_dir()
 
 
-def test_resolve_save_dir_falls_back_to_home_when_desktop_missing(tmp_path, monkeypatch):
+def test_resolve_save_dir_uses_home_screenshots_when_pictures_dir_missing(tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
+    screenshots = home / "Pictures" / "Screenshots"
 
     class FakeGLib:
         class UserDirectory:
-            DIRECTORY_DESKTOP = object()
+            DIRECTORY_PICTURES = object()
 
         @staticmethod
         def get_user_special_dir(_directory):
@@ -46,7 +49,8 @@ def test_resolve_save_dir_falls_back_to_home_when_desktop_missing(tmp_path, monk
     monkeypatch.setattr(app, "load_config", lambda: {})
     monkeypatch.setattr(app.Path, "home", staticmethod(lambda: home))
 
-    assert app.resolve_save_dir() == home
+    assert app.resolve_save_dir() == screenshots
+    assert screenshots.is_dir()
 
 
 def test_resolve_save_dir_uses_config_when_set(tmp_path, monkeypatch):
@@ -65,12 +69,14 @@ def test_resolve_save_dir_uses_config_when_set(tmp_path, monkeypatch):
 def test_resolve_save_dir_ignores_invalid_config_dir(tmp_path, monkeypatch):
     home = tmp_path / "home"
     home.mkdir()
+    screenshots = home / "Pictures" / "Screenshots"
 
     monkeypatch.setattr(app, "load_config", lambda: {"save_dir": "/nonexistent/path"})
     monkeypatch.setattr(app, "GLib", None)
     monkeypatch.setattr(app.Path, "home", staticmethod(lambda: home))
 
-    assert app.resolve_save_dir() == home
+    assert app.resolve_save_dir() == screenshots
+    assert screenshots.is_dir()
 
 
 def test_build_output_path_preserves_extension(monkeypatch, tmp_path):

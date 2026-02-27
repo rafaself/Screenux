@@ -134,14 +134,22 @@ def resolve_save_dir() -> Path:
         if custom_path.is_dir() and os.access(custom_path, os.W_OK | os.X_OK):
             return custom_path
 
-    desktop_dir: str | None = None
+    pictures_dir: str | None = None
     if GLib is not None:
-        desktop_dir = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP)
+        try:
+            pictures_dir = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES)
+        except Exception:
+            pictures_dir = None
 
-    if desktop_dir:
-        desktop_path = Path(desktop_dir).expanduser()
-        if desktop_path.is_dir() and os.access(desktop_path, os.W_OK | os.X_OK):
-            return desktop_path
+    base_dir = Path(pictures_dir).expanduser() if pictures_dir else (Path.home() / "Pictures")
+    screenshots_dir = base_dir / "Screenshots"
+    try:
+        screenshots_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    else:
+        if screenshots_dir.is_dir() and os.access(screenshots_dir, os.W_OK | os.X_OK):
+            return screenshots_dir
 
     return Path.home()
 
