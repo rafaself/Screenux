@@ -39,6 +39,17 @@ If Screenux is already installed for your user, you can rerun:
 ./install-screenux.sh
 ```
 
+Optional global CLI command (`screenux`):
+
+```bash
+sudo tee /usr/local/bin/screenux >/dev/null <<'EOF'
+#!/usr/bin/env bash
+
+/home/${USER}/dev/Screenux/screenux-screenshot
+EOF
+sudo chmod +x /usr/local/bin/screenux
+```
+
 ## Uninstall
 
 ```bash
