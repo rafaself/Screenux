@@ -2,69 +2,77 @@
 
 Simple, private screenshot tool for Linux desktops.
 
-Screenux is built for people who want a clean screenshot flow without extra clutter. Open the app, capture your screen, make quick annotations if needed, and save locally.
+Screenux focuses on a clean capture flow: take a screenshot, optionally annotate it, and save locally with safe defaults.
 
-## Why people use Screenux
+## ✨ Why Screenux
 
-- Clean interface: one main action, clear status messages.
-- Local-first: screenshots stay on your machine.
-- Wayland-friendly: uses desktop portal screenshot APIs.
-- Practical defaults: saves to Desktop, then Home if Desktop is unavailable.
+- 🧭 Clean interface with one primary action and clear status messages
+- 🔒 Local-first behavior (no cloud upload flow)
+- 🖼️ Wayland-friendly capture via desktop portal APIs
+- 📁 Practical folder defaults (Desktop, then Home fallback)
 
-## What it does
+## 🧩 Features
 
-- Capture via `Take Screenshot`.
-- Show status updates: `Ready`, `Capturing...`, `Saved: <path>`, `Cancelled`, `Failed: <reason>`.
-- Open an editor to add simple annotations (shapes/text) before saving.
-- Save using timestamped filenames with safe, non-overwriting writes.
+- Capture with `Take Screenshot`
+- Status updates: `Ready`, `Capturing...`, `Saved: <path>`, `Cancelled`, `Failed: <reason>`
+- Built-in editor for quick annotations (shapes/text)
+- Timestamped output names with safe, non-overwriting writes
 
-## Installation
+## 🚀 Quick start
 
-### 1) System dependencies
-
-Install:
+### 1) Install system dependencies
 
 - `python3`
 - `python3-gi`
 - GTK4 introspection (`gir1.2-gtk-4.0` on Debian/Ubuntu)
-- `xdg-desktop-portal` with a desktop backend (GNOME/KDE/etc.)
+- `xdg-desktop-portal` plus a desktop backend (GNOME/KDE/etc.)
 
-### 2) Get the project
+### 2) Clone the project
 
 ```bash
 git clone https://github.com/rafaself/Screenux.git
 cd Screenux
 ```
 
-### 3) Start the app
+### 3) Run Screenux
 
 ```bash
 ./screenux-screenshot
 ```
 
-## Usage
+## 🖱️ Usage
 
 1. Launch the app.
 2. Click `Take Screenshot`.
-3. Confirm or cancel in your system screenshot flow.
+3. Confirm or cancel in the system screenshot flow.
 4. (Optional) annotate in the editor.
-5. Save and check the status line for the final file path.
+5. Save and check the status line for the resulting file path.
 
-Folder behavior:
+Save folder behavior:
 
-- Default save folder is Desktop.
-- If Desktop is not writable, it falls back to Home.
-- You can change the target folder from the app (`Save to` → `Change…`).
+- Default target is Desktop.
+- If Desktop is unavailable or not writable, Screenux falls back to Home.
+- You can change the destination from the app (`Save to` → `Change…`).
 
-## Development
+## 🖼️ UI example
+
+![Screenux editor UI example](docs/images/ui-example.png)
+
+## 🛠️ Development
 
 ### Project layout
 
-- `src/screenux_screenshot.py`: app entrypoint, config, path helpers, offline enforcement
+- `src/screenux_screenshot.py`: app entrypoint, config/path helpers, offline enforcement
 - `src/screenux_window.py`: GTK window, portal flow, save-folder picker
 - `src/screenux_editor.py`: annotation editor and secure file writing
 - `tests/`: automated tests for path, window, screenshot, and editor logic
-- `screenux-screenshot`: launcher script used both on host and in Flatpak
+- `screenux-screenshot`: launcher script for host and Flatpak runtime
+
+### Install dev dependencies
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+```
 
 ### Local dev run
 
@@ -72,65 +80,54 @@ Folder behavior:
 ./screenux-screenshot
 ```
 
-### Dev dependencies
+## ✅ Testing
 
-```bash
-python3 -m pip install -r requirements-dev.txt
-```
-
-## Testing
-
-Run quick checks locally:
+Run fast checks locally:
 
 ```bash
 python3 -m py_compile src/screenux_screenshot.py
 pytest -q
 ```
 
-Manual sanity scenarios:
+Manual sanity checklist:
 
 1. App starts with `Ready`.
 2. Capture shows `Capturing...` and returns to interactive state.
-3. Save shows `Saved: <path>` and creates a file.
+3. Save shows `Saved: <path>` and writes a file.
 4. Cancel shows `Cancelled`.
-5. Invalid/failed portal path shows a clear `Failed: ...` message.
+5. Invalid/failed portal path shows `Failed: ...` with a clear reason.
 
-## CI
+## ⚙️ CI/CD
 
-⚙️ GitHub Actions workflow: `.github/workflows/ci.yml`
+Main workflow: `.github/workflows/ci.yml`
 
-The CI pipeline runs automatically on:
+Runs automatically on:
 
 - Pull requests targeting `main`
 - Pushes to `main`
 - Published releases
 
-Pipeline gates:
+Quality gates include:
 
-- **Quality checks**: static compile validation (`python -m compileall -q src`)
-- **Automated tests**: `pytest -q`
-- **Security auditing**: Bandit scan on `src/` and dependency vulnerability audit with `pip-audit`
-- **Dependency validation**: `pip check` and PR dependency review (`actions/dependency-review-action`)
-- **Build verification**: launcher syntax check, Flatpak manifest JSON validation, desktop entry validation, Docker Compose config validation, and Docker image build
+- Compile validation (`python -m compileall -q src`)
+- Automated tests (`pytest -q`)
+- Security checks (`bandit`, `pip-audit`)
+- Dependency checks (`pip check`, dependency review action)
+- Build/package validation (launcher, Flatpak manifest, desktop entry, Docker Compose, Docker build)
 
-These checks are intended to be required before merge/release so changes must satisfy code quality, security, and packaging requirements.
+Release artifacts workflow: `.github/workflows/release-artifacts.yml`
 
-Release artifact workflow:
+- Builds `screenux-screenshot.flatpak`
+- Generates `screenux-screenshot.flatpak.sha256`
+- Verifies installability in CI before publishing
+- Uploads artifacts to workflow results and GitHub Release assets
+- Uses least-privilege job permissions
 
-- `.github/workflows/release-artifacts.yml` runs on published releases (and manual dispatch).
-- Caches Flatpak state (`~/.local/share/flatpak`) and `build-dir` to speed up repeat builds.
-- Reads `app-id`, runtime, runtime version, and SDK directly from `flatpak/io.github.rafa.ScreenuxScreenshot.json`.
-- Builds a Flatpak bundle: `screenux-screenshot.flatpak`.
-- Generates integrity metadata: `screenux-screenshot.flatpak.sha256`.
-- Verifies the generated bundle can be installed in CI before publishing artifacts.
-- Uploads both files to the workflow artifacts and attaches them to the GitHub Release.
-- Uses least-privilege permissions: write access is scoped only to the release-asset attachment job.
-
-## Packaging
+## 📦 Packaging
 
 ### Docker (dev/build environment)
 
-Use Docker for reproducible test runs (GUI screenshot capture is not meant to run in Docker):
+Use Docker for reproducible tests and checks (GUI screenshot capture is not intended for Docker):
 
 ```bash
 # optional one-time setup
@@ -145,27 +142,24 @@ docker compose run --rm dev bandit -q -r src -x tests
 
 Notes:
 
-- `dev` runs as your host UID/GID via `LOCAL_UID`/`LOCAL_GID` (defaults to `1000:1000`) to avoid root-owned files in the repository.
-- You can put `LOCAL_UID` and `LOCAL_GID` in `.env` (for example by copying `.env.example`) to avoid exporting them each time.
-- `.env` must live at the repository root (same directory as `docker-compose.yml`) because Docker Compose auto-loads it from there.
-- `.env` is used for Docker Compose configuration only; the desktop app runtime does not read `.env`.
-- Python bytecode generation is disabled in the container to reduce cache noise in bind-mounted sources.
-- Pytest cache provider is disabled in the container to avoid bind-mount permission issues on host-mounted workspaces.
+- `dev` runs as host UID/GID (`LOCAL_UID`/`LOCAL_GID`, default `1000:1000`) to avoid root-owned files.
+- You can store `LOCAL_UID` and `LOCAL_GID` in `.env` to avoid exporting every session.
+- `.env` must be at repository root (same directory as `docker-compose.yml`) for Compose auto-loading.
+- `.env` config is for Docker Compose only; Screenux runtime does not read it.
+- Python bytecode and pytest cache are disabled in container runs to reduce bind-mount noise/permission issues.
 
 ### Flatpak
-
-📦 Build and run locally:
 
 ```bash
 flatpak-builder --force-clean build-dir flatpak/io.github.rafa.ScreenuxScreenshot.json
 flatpak-builder --run build-dir flatpak/io.github.rafa.ScreenuxScreenshot.json screenux-screenshot
 ```
 
-Flatpak permissions are intentionally narrow (portal access + Desktop filesystem).
+Flatpak permissions stay intentionally narrow (portal access + Desktop filesystem).
 
-## Privacy and security notes
+## 🔐 Privacy & security
 
-- Offline-only runtime behavior: networking and DNS calls are blocked.
-- Screenshot source validation accepts only local, readable `file://` URIs.
-- Config parsing is defensive (invalid/non-object/oversized config files are ignored).
-- Saved files are created with exclusive mode to avoid accidental overwrite.
+- Offline-only runtime behavior blocks networking and DNS calls.
+- Screenshot sources are validated as local, readable `file://` URIs.
+- Config parsing is defensive (invalid/non-object/oversized files are ignored).
+- Save operations use exclusive file creation to avoid accidental overwrite.
