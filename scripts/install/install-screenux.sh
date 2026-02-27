@@ -2,11 +2,16 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/install/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/install/lib/gnome_shortcuts.sh
 source "${SCRIPT_DIR}/lib/gnome_shortcuts.sh"
 
+DEFAULT_BUNDLE_NAME="screenux-screenshot.flatpak"
+PRINT_KEYBINDING="['Print']"
+
 usage() {
-  cat <<'EOF'
+  cat << 'EOF'
 Usage:
   ./install-screenux.sh [--bundle /path/to/screenux-screenshot.flatpak] [--shortcut "['<Control><Shift>s']"]
   ./install-screenux.sh [--bundle /path/to/screenux-screenshot.flatpak] --print-screen
@@ -43,7 +48,7 @@ resolve_default_bundle() {
 
 install_bundle() {
   local flatpak_file="$1"
-  if ! command -v flatpak >/dev/null 2>&1; then
+  if ! command -v flatpak > /dev/null 2>&1; then
     fail "Required command not found: flatpak. Install Flatpak first, then rerun."
   fi
 
@@ -51,7 +56,7 @@ install_bundle() {
     [[ -f "${flatpak_file}" ]] || fail "Flatpak bundle not found: ${flatpak_file}"
     echo "==> Installing Flatpak bundle: ${flatpak_file}"
     flatpak install -y --user --or-update "${flatpak_file}"
-  elif flatpak info --user "${APP_ID}" >/dev/null 2>&1; then
+  elif flatpak info --user "${APP_ID}" > /dev/null 2>&1; then
     echo "==> ${APP_ID} is already installed for this user; skipping bundle install"
   else
     local inferred_bundle=""
@@ -70,7 +75,7 @@ install_bundle() {
 validate_installation() {
   echo "==> Validating installation"
 
-  if ! flatpak info --user "${APP_ID}" >/dev/null 2>&1; then
+  if ! flatpak info --user "${APP_ID}" > /dev/null 2>&1; then
     fail "Validation failed: ${APP_ID} is not installed for current user."
   fi
   [[ -x "${WRAPPER_PATH}" ]] || fail "Validation failed: wrapper not executable at ${WRAPPER_PATH}"
@@ -110,7 +115,7 @@ main() {
 
   while (($# > 0)); do
     case "$1" in
-      -h|--help)
+      -h | --help)
         usage
         exit 0
         ;;

@@ -2,11 +2,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/install/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/install/lib/gnome_shortcuts.sh
 source "${SCRIPT_DIR}/lib/gnome_shortcuts.sh"
 
 usage() {
-  cat <<'EOF'
+  cat << 'EOF'
 Usage:
   ./uninstall-screenux.sh [--preserve-user-data]
 
@@ -17,12 +19,12 @@ EOF
 }
 
 remove_flatpak_app() {
-  if ! command -v flatpak >/dev/null 2>&1; then
+  if ! command -v flatpak > /dev/null 2>&1; then
     echo "NOTE: flatpak not found; skipping Flatpak uninstall."
     return 0
   fi
 
-  if flatpak info --user "${APP_ID}" >/dev/null 2>&1; then
+  if flatpak info --user "${APP_ID}" > /dev/null 2>&1; then
     echo "==> Uninstalling Flatpak app: ${APP_ID}"
     flatpak uninstall -y --user "${APP_ID}"
   else
@@ -47,7 +49,7 @@ validate_uninstall() {
 
   echo "==> Validating uninstall"
 
-  if command -v flatpak >/dev/null 2>&1 && flatpak info --user "${APP_ID}" >/dev/null 2>&1; then
+  if command -v flatpak > /dev/null 2>&1 && flatpak info --user "${APP_ID}" > /dev/null 2>&1; then
     fail "Validation failed: ${APP_ID} is still installed for current user."
   fi
 
@@ -67,7 +69,7 @@ main() {
 
   while (($# > 0)); do
     case "$1" in
-      -h|--help)
+      -h | --help)
         usage
         exit 0
         ;;

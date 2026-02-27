@@ -69,6 +69,8 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         save_config: Callable[[dict[str, Any]], None],
         build_output_path: Callable[[str], Path],
         format_status_saved: Callable[[Path], str],
+        hotkey_manager: Any | None = None,
+        initial_hotkey_warning: str | None = None,
     ):
         super().__init__(application=app, title="Screenux Screenshot")
         self.set_icon_name(icon_name)
@@ -79,10 +81,13 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         self._save_config = save_config
         self._build_output_path = build_output_path
         self._format_status_saved = format_status_saved
+        self._hotkey_manager = hotkey_manager
 
         self._request_counter = 0
         self._bus = None
         self._signal_sub_id: int | None = None
+        self._hotkey_entry: Gtk.Entry | None = None
+        self._hotkey_value_label: Gtk.Label | None = None
 
         self._main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self._main_box.set_margin_top(16)
@@ -112,10 +117,85 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         folder_row.append(change_btn)
 
         self._main_box.append(folder_row)
+        self._build_hotkey_settings()
         self.set_child(self._main_box)
+
+        if initial_hotkey_warning:
+            self.set_nonblocking_warning(initial_hotkey_warning)
 
     def take_screenshot(self) -> None:
         self._on_take_screenshot(self._button)
+
+    def set_nonblocking_warning(self, warning_text: str) -> None:
+        self._set_status(f"Warning: {warning_text}")
+
+    def _build_hotkey_settings(self) -> None:
+        if self._hotkey_manager is None:
+            return
+
+        current_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        current_row.append(Gtk.Label(label="Global hotkey:"))
+        self._hotkey_value_label = Gtk.Label(label="")
+        self._hotkey_value_label.set_xalign(0.0)
+        self._hotkey_value_label.set_hexpand(True)
+        current_row.append(self._hotkey_value_label)
+        self._main_box.append(current_row)
+
+        edit_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self._hotkey_entry = Gtk.Entry()
+        self._hotkey_entry.set_hexpand(True)
+        self._hotkey_entry.set_placeholder_text("Ctrl+Shift+S")
+        edit_row.append(self._hotkey_entry)
+
+        apply_btn = Gtk.Button(label="Apply")
+        apply_btn.connect("clicked", self._on_hotkey_apply)
+        edit_row.append(apply_btn)
+
+        disable_btn = Gtk.Button(label="Disable")
+        disable_btn.connect("clicked", self._on_hotkey_disable)
+        edit_row.append(disable_btn)
+
+        self._main_box.append(edit_row)
+        self._refresh_hotkey_ui()
+
+    def _refresh_hotkey_ui(self) -> None:
+        if self._hotkey_manager is None:
+            return
+        current = self._hotkey_manager.current_shortcut()
+        if self._hotkey_value_label is not None:
+            self._hotkey_value_label.set_text(current or "Disabled")
+        if self._hotkey_entry is not None:
+            self._hotkey_entry.set_text(current or "")
+
+    def _apply_hotkey_result(self, result: Any) -> None:
+        if self._hotkey_value_label is not None:
+            self._hotkey_value_label.set_text(result.shortcut or "Disabled")
+        if self._hotkey_entry is not None:
+            self._hotkey_entry.set_text(result.shortcut or "")
+        if result.warning:
+            self.set_nonblocking_warning(result.warning)
+            return
+        self._set_status("Ready")
+
+    def _on_hotkey_apply(self, _button: Gtk.Button) -> None:
+        if self._hotkey_manager is None or self._hotkey_entry is None:
+            return
+        user_value = self._hotkey_entry.get_text().strip()
+        if not user_value:
+            self._set_status("Failed: shortcut cannot be empty (use Disable)")
+            return
+        try:
+            result = self._hotkey_manager.apply_shortcut(user_value)
+        except ValueError as err:
+            self._set_status(f"Failed: invalid shortcut ({err})")
+            return
+        self._apply_hotkey_result(result)
+
+    def _on_hotkey_disable(self, _button: Gtk.Button) -> None:
+        if self._hotkey_manager is None:
+            return
+        result = self._hotkey_manager.disable_shortcut()
+        self._apply_hotkey_result(result)
 
     def _build_handle_token(self) -> str:
         self._request_counter += 1

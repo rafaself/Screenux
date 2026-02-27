@@ -12,14 +12,10 @@ ICON_FILE="${ICON_DIR}/${APP_ID}.svg"
 ICON_FILE_LIGHT="${ICON_DIR}/${APP_ID}-light.svg"
 ICON_FILE_DARK="${ICON_DIR}/${APP_ID}-dark.svg"
 APP_DATA_DIR="${HOME}/.var/app/${APP_ID}"
-DEFAULT_BUNDLE_NAME="screenux-screenshot.flatpak"
 COMMON_LIB_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 APP_ICON_SOURCE="${COMMON_LIB_DIR}/../../../assets/icons/${APP_ID}.svg"
 APP_ICON_LIGHT_SOURCE="${COMMON_LIB_DIR}/../../../assets/icons/${APP_ID}-light.svg"
 APP_ICON_DARK_SOURCE="${COMMON_LIB_DIR}/../../../assets/icons/${APP_ID}-dark.svg"
-
-DEFAULT_KEYBINDING="['<Control><Shift>s']"
-PRINT_KEYBINDING="['Print']"
 
 fail() {
   echo "ERROR: $*" >&2
@@ -27,7 +23,7 @@ fail() {
 }
 
 check_command() {
-  command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
+  command -v "$1" > /dev/null 2>&1 || fail "Required command not found: $1"
 }
 
 ensure_wrapper_path_notice() {
@@ -41,7 +37,7 @@ ensure_wrapper_path_notice() {
 create_wrapper() {
   echo "==> Creating wrapper command: ${WRAPPER_PATH}"
   mkdir -p "${WRAPPER_DIR}"
-  cat >"${WRAPPER_PATH}" <<EOF
+  cat > "${WRAPPER_PATH}" << EOF
 #!/usr/bin/env bash
 exec flatpak run ${APP_ID} "\$@"
 EOF
@@ -52,7 +48,7 @@ EOF
 create_desktop_entry() {
   echo "==> Creating desktop entry: ${DESKTOP_FILE}"
   mkdir -p "${DESKTOP_DIR}"
-  cat >"${DESKTOP_FILE}" <<EOF
+  cat > "${DESKTOP_FILE}" << EOF
 [Desktop Entry]
 Type=Application
 Name=${APP_NAME}
@@ -108,12 +104,12 @@ refresh_icon_cache() {
     return 0
   fi
 
-  if command -v gtk4-update-icon-cache >/dev/null 2>&1; then
-    gtk4-update-icon-cache -f -t "${icon_theme_root}" >/dev/null 2>&1 || true
+  if command -v gtk4-update-icon-cache > /dev/null 2>&1; then
+    gtk4-update-icon-cache -f -t "${icon_theme_root}" > /dev/null 2>&1 || true
     return 0
   fi
 
-  if command -v gtk-update-icon-cache >/dev/null 2>&1; then
-    gtk-update-icon-cache -f -t "${icon_theme_root}" >/dev/null 2>&1 || true
+  if command -v gtk-update-icon-cache > /dev/null 2>&1; then
+    gtk-update-icon-cache -f -t "${icon_theme_root}" > /dev/null 2>&1 || true
   fi
 }
