@@ -85,7 +85,7 @@ Optional GNOME Print Screen shortcut:
 ./install-screenux.sh --bundle /path/to/screenux-screenshot.flatpak --print-screen
 ```
 
-This maps `Print` to `screenux-screenshot --capture`, which opens Screenux and immediately starts the capture flow.
+This maps `Print` to `screenux-screenshot --capture`, which opens Screenux directly in the final capture/edit stage (without stopping on the main screen first).
 
 If Screenux is already installed for your user, you can rerun:
 
@@ -137,8 +137,9 @@ Global hotkey behavior:
 - On GNOME, the shortcut is persisted as a GNOME custom shortcut and works when the app is closed.
 - On non-GNOME desktops, global shortcut support is best-effort while the app is running.
 - Shortcut config is stored at `~/.config/screenux/settings.json` as `global_hotkey` (`null` disables it).
-- You can type a new shortcut directly in the app window and press `Enter` or `Apply`.
-- You can return to default quickly with `Default`, or disable with `Disable`.
+- While the shortcut field is focused, press the key combo and Screenux builds it automatically (example: `Ctrl + S`).
+- You can apply with `Enter` or `Apply`.
+- You can return to default with `Default`, or clear/disable with `Clear`.
 
 ## 🖼️ UI example
 

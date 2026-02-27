@@ -35,6 +35,9 @@ class DummyEntry:
     def set_text(self, text):
         self.text = text
 
+    def set_position(self, _position):
+        return None
+
 
 class DummyHotkeyManager:
     def __init__(self):
@@ -79,6 +82,8 @@ class FakeWindowSelf:
         self._request_counter = 0
         self._bus = None
         self._signal_sub_id = None
+        self._present_after_capture = False
+        self._present_calls = 0
         self._button = DummyButton()
         self._status_label = DummyLabel()
         self._main_box = object()
@@ -112,6 +117,9 @@ class FakeWindowSelf:
     def set_child(self, child):
         self._set_child_value = child
 
+    def present(self):
+        self._present_calls += 1
+
 
 def test_window_take_screenshot_public_method():
     self = FakeWindowSelf()
@@ -121,6 +129,27 @@ def test_window_take_screenshot_public_method():
     window.MainWindow.take_screenshot(self)
 
     assert called == [self._button]
+
+
+def test_window_trigger_shortcut_capture_sets_deferred_presentation_flag():
+    self = FakeWindowSelf()
+    calls = []
+    self.take_screenshot = lambda: calls.append("capture")
+
+    window.MainWindow.trigger_shortcut_capture(self)
+
+    assert calls == ["capture"]
+    assert self._present_after_capture is True
+
+
+def test_window_finish_presents_when_shortcut_capture_is_deferred():
+    self = FakeWindowSelf()
+    self._present_after_capture = True
+
+    window.MainWindow._finish(self, "Done")
+
+    assert self._present_calls == 1
+    assert self._present_after_capture is False
 
 
 def test_window_hotkey_apply_accepts_printscreen_alias():
@@ -139,6 +168,23 @@ def test_window_hotkey_apply_accepts_printscreen_alias():
     assert manager.last_applied == "ctrl+print screen"
     assert self._applied_result is not None
     assert self._applied_result.shortcut == "ctrl+print screen"
+
+
+def test_window_hotkey_apply_rejects_empty_and_mentions_clear():
+    manager = DummyHotkeyManager()
+    self = SimpleNamespace(
+        _hotkey_manager=manager,
+        _hotkey_entry=DummyEntry(""),
+        _set_status=lambda text: setattr(self, "_status_text", text),
+        _apply_hotkey_result=lambda result: setattr(self, "_applied_result", result),
+    )
+    self._status_text = ""
+    self._applied_result = None
+
+    window.MainWindow._on_hotkey_apply(self, None)
+
+    assert "use Clear" in self._status_text
+    assert self._applied_result is None
 
 
 def test_window_hotkey_restore_default():
@@ -165,6 +211,101 @@ def test_window_hotkey_entry_activate_triggers_apply():
     window.MainWindow._on_hotkey_entry_activate(self, "entry")
 
     assert calls == ["entry"]
+
+
+def test_window_hotkey_capture_builds_shortcut_from_key_event(monkeypatch):
+    fake_gdk = SimpleNamespace(
+        ModifierType=SimpleNamespace(
+            CONTROL_MASK=1,
+            ALT_MASK=2,
+            SHIFT_MASK=4,
+            SUPER_MASK=8,
+        ),
+        KEY_Control_L=1000,
+        KEY_Control_R=1001,
+        KEY_Shift_L=1002,
+        KEY_Shift_R=1003,
+        KEY_Alt_L=1004,
+        KEY_Alt_R=1005,
+        KEY_Super_L=1006,
+        KEY_Super_R=1007,
+        KEY_Meta_L=1008,
+        KEY_Meta_R=1009,
+        KEY_ISO_Left_Tab=1010,
+        KEY_Return=1011,
+        KEY_KP_Enter=1012,
+        keyval_name=lambda keyval: {115: "s", 1111: "Print", 1112: "F5"}.get(keyval),
+    )
+    monkeypatch.setattr(window, "Gdk", fake_gdk)
+
+    self = SimpleNamespace(
+        _hotkey_entry=DummyEntry(""),
+        _set_status=lambda text: setattr(self, "_status_text", text),
+    )
+    self._status_text = ""
+
+    consumed = window.MainWindow._on_hotkey_entry_key_pressed(
+        self,
+        None,
+        115,
+        0,
+        fake_gdk.ModifierType.CONTROL_MASK | fake_gdk.ModifierType.SHIFT_MASK,
+    )
+    assert consumed is True
+    assert self._hotkey_entry.text == "Ctrl + Shift + S"
+
+    consumed_modifier = window.MainWindow._on_hotkey_entry_key_pressed(
+        self,
+        None,
+        fake_gdk.KEY_Control_L,
+        0,
+        fake_gdk.ModifierType.CONTROL_MASK,
+    )
+    assert consumed_modifier is True
+    assert self._hotkey_entry.text == "Ctrl + Shift + S"
+
+
+def test_window_hotkey_capture_ignores_unmapped_key(monkeypatch):
+    fake_gdk = SimpleNamespace(
+        ModifierType=SimpleNamespace(
+            CONTROL_MASK=1,
+            ALT_MASK=2,
+            SHIFT_MASK=4,
+            SUPER_MASK=8,
+        ),
+        KEY_Control_L=1000,
+        KEY_Control_R=1001,
+        KEY_Shift_L=1002,
+        KEY_Shift_R=1003,
+        KEY_Alt_L=1004,
+        KEY_Alt_R=1005,
+        KEY_Super_L=1006,
+        KEY_Super_R=1007,
+        KEY_Meta_L=1008,
+        KEY_Meta_R=1009,
+        KEY_ISO_Left_Tab=1010,
+        KEY_Return=1011,
+        KEY_KP_Enter=1012,
+        keyval_name=lambda _keyval: None,
+    )
+    monkeypatch.setattr(window, "Gdk", fake_gdk)
+
+    self = SimpleNamespace(
+        _hotkey_entry=DummyEntry("Ctrl + S"),
+        _set_status=lambda text: setattr(self, "_status_text", text),
+    )
+    self._status_text = ""
+
+    consumed = window.MainWindow._on_hotkey_entry_key_pressed(
+        self,
+        None,
+        61,
+        0,
+        0,
+    )
+    assert consumed is True
+    assert self._hotkey_entry.text == "Ctrl + S"
+    assert self._status_text == ""
 
 
 class DummyError(Exception):
@@ -522,6 +663,53 @@ def test_screenshot_app_command_line_can_request_capture_on_existing_instance():
     assert result == 0
     assert app._auto_capture_pending is True
     assert app.activated is True
+
+
+def test_screenshot_app_do_activate_auto_capture_skips_initial_present(monkeypatch):
+    if not hasattr(screenshot.ScreenuxScreenshotApp, "do_activate"):
+        return
+
+    created = {}
+
+    class FakeWindow:
+        def __init__(self, *_args, **_kwargs):
+            self.present_calls = 0
+            self.capture_calls = 0
+            created["window"] = self
+
+        def present(self):
+            self.present_calls += 1
+
+        def set_icon_name(self, _name):
+            return None
+
+        def set_nonblocking_warning(self, _text):
+            return None
+
+        def trigger_shortcut_capture(self):
+            self.capture_calls += 1
+
+    class FakeGtkWindow:
+        @staticmethod
+        def set_default_icon_name(_name):
+            return None
+
+    monkeypatch.setattr(screenshot, "MainWindow", FakeWindow)
+    monkeypatch.setattr(screenshot, "Gtk", SimpleNamespace(Window=FakeGtkWindow))
+
+    app = SimpleNamespace(
+        _auto_capture_pending=True,
+        _hotkey_manager=SimpleNamespace(
+            ensure_registered=lambda: SimpleNamespace(warning=None)
+        ),
+        props=SimpleNamespace(active_window=None),
+    )
+
+    screenshot.ScreenuxScreenshotApp.do_activate(app)
+
+    assert app._auto_capture_pending is False
+    assert created["window"].capture_calls == 1
+    assert created["window"].present_calls == 0
 
 
 def test_screenshot_enforce_offline_mode_blocks_network(monkeypatch):

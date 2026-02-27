@@ -8,16 +8,74 @@ from typing import Any, Callable
 
 import gi
 
+gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gio, GLib, Gtk, Pango
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango
 
 from screenux_editor import AnnotationEditor, load_image_surface
-from screenux_hotkey import DEFAULT_SHORTCUT
+from screenux_hotkey import DEFAULT_SHORTCUT, normalize_shortcut
 
 PORTAL_DEST = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"
 PORTAL_SCREENSHOT_IFACE = "org.freedesktop.portal.Screenshot"
 PORTAL_REQUEST_IFACE = "org.freedesktop.portal.Request"
+
+
+def _shortcut_display_text(shortcut: str) -> str:
+    return shortcut.replace("+", " + ")
+
+
+def _shortcut_modifiers_from_state(state: int) -> list[str]:
+    modifiers: list[str] = []
+    mapping = (
+        (Gdk.ModifierType.CONTROL_MASK, "Ctrl"),
+        (Gdk.ModifierType.ALT_MASK, "Alt"),
+        (Gdk.ModifierType.SHIFT_MASK, "Shift"),
+        (Gdk.ModifierType.SUPER_MASK, "Super"),
+    )
+    for mask, token in mapping:
+        if state & mask:
+            modifiers.append(token)
+    return modifiers
+
+
+def _is_modifier_keyval(keyval: int) -> bool:
+    modifier_keys = (
+        Gdk.KEY_Control_L,
+        Gdk.KEY_Control_R,
+        Gdk.KEY_Shift_L,
+        Gdk.KEY_Shift_R,
+        Gdk.KEY_Alt_L,
+        Gdk.KEY_Alt_R,
+        Gdk.KEY_Super_L,
+        Gdk.KEY_Super_R,
+        Gdk.KEY_Meta_L,
+        Gdk.KEY_Meta_R,
+    )
+    return keyval in modifier_keys
+
+
+def _shortcut_key_token_from_keyval(keyval: int) -> str | None:
+    if _is_modifier_keyval(keyval):
+        return None
+    if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+        return "Enter"
+    if keyval == Gdk.KEY_ISO_Left_Tab:
+        return "Tab"
+
+    key_name = Gdk.keyval_name(keyval) or ""
+    if not key_name:
+        return None
+    if key_name in ("space", "Space"):
+        return "Space"
+
+    if key_name.startswith("KP_") and len(key_name) == 4 and key_name[-1].isdigit():
+        return key_name[-1]
+
+    compact = key_name.replace("_", "")
+    if len(compact) == 1:
+        return compact.upper()
+    return compact
 
 
 def _normalize_bus_name(unique_name: str) -> str:
@@ -89,6 +147,7 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         self._signal_sub_id: int | None = None
         self._hotkey_entry: Gtk.Entry | None = None
         self._hotkey_value_label: Gtk.Label | None = None
+        self._present_after_capture = False
 
         self._main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self._main_box.set_margin_top(16)
@@ -147,6 +206,9 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         self._hotkey_entry.set_hexpand(True)
         self._hotkey_entry.set_placeholder_text(DEFAULT_SHORTCUT)
         self._hotkey_entry.connect("activate", self._on_hotkey_entry_activate)
+        key_controller = Gtk.EventControllerKey()
+        key_controller.connect("key-pressed", self._on_hotkey_entry_key_pressed)
+        self._hotkey_entry.add_controller(key_controller)
         edit_row.append(self._hotkey_entry)
 
         apply_btn = Gtk.Button(label="Apply")
@@ -157,7 +219,7 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         default_btn.connect("clicked", self._on_hotkey_restore_default)
         edit_row.append(default_btn)
 
-        disable_btn = Gtk.Button(label="Disable")
+        disable_btn = Gtk.Button(label="Clear")
         disable_btn.connect("clicked", self._on_hotkey_disable)
         edit_row.append(disable_btn)
 
@@ -171,13 +233,13 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         if self._hotkey_value_label is not None:
             self._hotkey_value_label.set_text(current or "Disabled")
         if self._hotkey_entry is not None:
-            self._hotkey_entry.set_text(current or "")
+            self._hotkey_entry.set_text(_shortcut_display_text(current) if current else "")
 
     def _apply_hotkey_result(self, result: Any) -> None:
         if self._hotkey_value_label is not None:
             self._hotkey_value_label.set_text(result.shortcut or "Disabled")
         if self._hotkey_entry is not None:
-            self._hotkey_entry.set_text(result.shortcut or "")
+            self._hotkey_entry.set_text(_shortcut_display_text(result.shortcut) if result.shortcut else "")
         if result.warning:
             self.set_nonblocking_warning(result.warning)
             return
@@ -188,7 +250,7 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
             return
         user_value = self._hotkey_entry.get_text().strip()
         if not user_value:
-            self._set_status("Failed: shortcut cannot be empty (use Disable)")
+            self._set_status("Failed: shortcut cannot be empty (use Clear)")
             return
         try:
             result = self._hotkey_manager.apply_shortcut(user_value)
@@ -196,6 +258,34 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
             self._set_status(f"Failed: invalid shortcut ({err})")
             return
         self._apply_hotkey_result(result)
+
+    def _on_hotkey_entry_key_pressed(
+        self,
+        _controller: Gtk.EventControllerKey,
+        keyval: int,
+        _keycode: int,
+        state: int,
+    ) -> bool:
+        if self._hotkey_entry is None:
+            return False
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            return False
+
+        key_token = _shortcut_key_token_from_keyval(keyval)
+        if key_token is None:
+            return True
+
+        candidate = "+".join([*_shortcut_modifiers_from_state(state), key_token])
+        try:
+            normalized = normalize_shortcut(candidate)
+        except ValueError as err:
+            self._set_status(f"Failed: invalid shortcut ({err})")
+            return True
+
+        self._hotkey_entry.set_text(_shortcut_display_text(normalized))
+        self._hotkey_entry.set_position(-1)
+        self._set_status("Ready")
+        return True
 
     def _on_hotkey_entry_activate(self, _entry: Gtk.Entry) -> None:
         self._on_hotkey_apply(_entry)
@@ -211,6 +301,10 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
             return
         result = self._hotkey_manager.disable_shortcut()
         self._apply_hotkey_result(result)
+
+    def trigger_shortcut_capture(self) -> None:
+        self._present_after_capture = True
+        self.take_screenshot()
 
     def _build_handle_token(self) -> str:
         self._request_counter += 1
@@ -228,6 +322,9 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         self._unsubscribe_signal()
         self._button.set_sensitive(True)
         self._set_status(status)
+        if getattr(self, "_present_after_capture", False):
+            self.present()
+            self._present_after_capture = False
 
     def _fail(self, reason: str) -> None:
         self._finish(f"Failed: {reason}")
@@ -344,6 +441,9 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
             on_error=self._on_editor_error,
         )
         self.set_child(editor)
+        if getattr(self, "_present_after_capture", False):
+            self.present()
+            self._present_after_capture = False
 
     def _on_editor_save(self, saved_path: Path) -> None:
         self._show_main_panel()

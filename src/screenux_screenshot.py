@@ -209,6 +209,8 @@ if Gtk is not None:
             icon_name = select_icon_name()
             Gtk.Window.set_default_icon_name(icon_name)
             hotkey_result = self._hotkey_manager.ensure_registered()
+            auto_capture = self._auto_capture_pending
+            self._auto_capture_pending = False
             window = self.props.active_window
             if window is None:
                 window = MainWindow(
@@ -226,9 +228,11 @@ if Gtk is not None:
                 window.set_icon_name(icon_name)
                 if hotkey_result.warning and hasattr(window, "set_nonblocking_warning"):
                     window.set_nonblocking_warning(hotkey_result.warning)
+            if auto_capture and hasattr(window, "trigger_shortcut_capture"):
+                window.trigger_shortcut_capture()
+                return
             window.present()
-            if self._auto_capture_pending:
-                self._auto_capture_pending = False
+            if auto_capture:
                 GLib.idle_add(self._trigger_auto_capture, window)
 else:
     class ScreenuxScreenshotApp:  # pragma: no cover
