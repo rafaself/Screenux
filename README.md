@@ -12,7 +12,9 @@ Minimal Linux desktop screenshot app built with Python + GTK4 and xdg-desktop-po
 
 ## Project Layout
 
-- `src/screenux_screenshot.py`: app implementation
+- `src/screenux_screenshot.py`: entrypoint + config/path helpers
+- `src/screenux_window.py`: main window and portal flow
+- `src/screenux_editor.py`: annotation editor and image rendering
 - `screenux-screenshot`: launcher script
 - `io.github.rafa.ScreenuxScreenshot.desktop`: desktop entry
 - `flatpak/io.github.rafa.ScreenuxScreenshot.json`: Flatpak manifest
