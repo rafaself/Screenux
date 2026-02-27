@@ -1,0 +1,13 @@
+[run]
+source =
+    src
+omit =
+    src/screenux_editor.py
+    src/screenux_window.py
+
+[report]
+fail_under = 100
+show_missing = True
+exclude_also =
+    if Gtk is not None:
+    if __name__ == "__main__":

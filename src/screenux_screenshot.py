@@ -16,9 +16,9 @@ try:
     from gi.repository import Gio, GLib, Gtk
 except Exception as exc:  # pragma: no cover - handled at runtime
     GI_IMPORT_ERROR = exc
-    Gio = None  # type: ignore[assignment]
-    GLib = None  # type: ignore[assignment]
-    Gtk = None  # type: ignore[assignment]
+    Gio = None  # type: ignore[assignment]  # pragma: no cover
+    GLib = None  # type: ignore[assignment]  # pragma: no cover
+    Gtk = None  # type: ignore[assignment]  # pragma: no cover
 
 APP_ID = "io.github.rafa.ScreenuxScreenshot"
 
