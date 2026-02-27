@@ -3,7 +3,13 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.dev
+    init: true
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
     working_dir: /workspace
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+      PYTEST_ADDOPTS: "-p no:cacheprovider"
     volumes:
       - .:/workspace
     command: bash

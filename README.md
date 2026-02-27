@@ -133,10 +133,18 @@ Release artifact workflow:
 Use Docker for reproducible test runs (GUI screenshot capture is not meant to run in Docker):
 
 ```bash
+export LOCAL_UID=$(id -u) LOCAL_GID=$(id -g)
 docker compose build dev
 docker compose run --rm dev python3 -m py_compile src/screenux_screenshot.py
 docker compose run --rm dev pytest -q
+docker compose run --rm dev bandit -q -r src -x tests
 ```
+
+Notes:
+
+- `dev` runs as your host UID/GID via `LOCAL_UID`/`LOCAL_GID` (defaults to `1000:1000`) to avoid root-owned files in the repository.
+- Python bytecode generation is disabled in the container to reduce cache noise in bind-mounted sources.
+- Pytest cache provider is disabled in the container to avoid bind-mount permission issues on host-mounted workspaces.
 
 ### Flatpak
 
