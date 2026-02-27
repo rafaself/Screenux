@@ -136,12 +136,14 @@ Global hotkey behavior:
 
 - Default shortcut is `Ctrl+Print`.
 - If it is already taken, Screenux falls back to `Ctrl+Shift+S` (then `Ctrl+Alt+S`, then `Alt+Shift+S`, then `Super+Shift+S`).
+- On GNOME/Linux, native screenshot bindings (including clipboard variants like `Ctrl+Print`) are treated as conflicts, so Screenux automatically falls back instead of silently failing.
 - On GNOME, the shortcut is persisted as a GNOME custom shortcut and works when the app is closed.
 - On non-GNOME desktops, global shortcut support is best-effort while the app is running.
 - Shortcut config is stored at `~/.config/screenux/settings.json` as `global_hotkey` (`null` disables it).
 - While the shortcut field is focused, press the key combo and Screenux builds it automatically (example: `Ctrl + S`).
 - You can apply with `Enter` or `Apply`.
 - You can return to default with `Default`, or clear/disable with `Clear`.
+- Set `SCREENUX_LOG_LEVEL=INFO` to emit hotkey telemetry to stderr (registration resolution and `--capture` detection/handling) when debugging shortcut issues.
 
 ## 🖼️ UI example
 

@@ -682,6 +682,24 @@ def test_screenshot_app_command_line_can_request_capture_on_existing_instance():
     assert app.activated is True
 
 
+def test_screenshot_app_command_line_emits_capture_detection_log(caplog):
+    if not hasattr(screenshot.ScreenuxScreenshotApp, "do_command_line"):
+        return
+
+    app = SimpleNamespace(_auto_capture_pending=False, activate=lambda: None)
+
+    class FakeCommandLine:
+        @staticmethod
+        def get_arguments():
+            return ["screenux-screenshot", "--capture"]
+
+    with caplog.at_level("INFO", logger="screenux.app"):
+        screenshot.ScreenuxScreenshotApp.do_command_line(app, FakeCommandLine())
+
+    assert "hotkey.event.detected source=command-line" in caplog.text
+    assert "--capture" in caplog.text
+
+
 def test_screenshot_app_do_activate_auto_capture_skips_initial_present(monkeypatch):
     if not hasattr(screenshot.ScreenuxScreenshotApp, "do_activate"):
         return

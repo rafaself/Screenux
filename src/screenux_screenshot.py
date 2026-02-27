@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import socket
 import sys
@@ -30,6 +31,8 @@ APP_ID = "io.github.rafa.ScreenuxScreenshot"
 _MAX_CONFIG_SIZE = 64 * 1024
 _ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
 APP_VERSION = "0.1.0"
+_LOG_LEVEL_ENV = "SCREENUX_LOG_LEVEL"
+LOGGER = logging.getLogger("screenux.app")
 
 
 def _print_help() -> None:
@@ -172,6 +175,20 @@ def format_status_saved(path: Path) -> str:
     return f"Saved: {path}"
 
 
+def configure_logging() -> None:
+    level_name = os.environ.get(_LOG_LEVEL_ENV, "").strip().upper()
+    if not level_name:
+        return
+
+    level = getattr(logging, level_name, None)
+    if not isinstance(level, int):
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+        LOGGER.warning("Invalid %s value: %s", _LOG_LEVEL_ENV, level_name)
+        return
+
+    logging.basicConfig(level=level, format="%(levelname)s %(name)s %(message)s")
+
+
 def _parse_cli_args(argv: list[str]) -> tuple[list[str], bool]:
     filtered = [argv[0]] if argv else []
     auto_capture = False
@@ -210,6 +227,7 @@ if Gtk is not None:
             _, auto_capture = _parse_cli_args(args)
             if auto_capture:
                 self._auto_capture_pending = True
+                LOGGER.info("hotkey.event.detected source=command-line args=%s", args)
             self.activate()
             return 0
 
@@ -217,6 +235,11 @@ if Gtk is not None:
             icon_name = select_icon_name()
             Gtk.Window.set_default_icon_name(icon_name)
             hotkey_result = self._hotkey_manager.ensure_registered()
+            LOGGER.info(
+                "hotkey.registration.result shortcut=%r warning=%r",
+                getattr(hotkey_result, "shortcut", None),
+                getattr(hotkey_result, "warning", None),
+            )
             auto_capture = self._auto_capture_pending
             self._auto_capture_pending = False
             window = self.props.active_window
@@ -237,6 +260,7 @@ if Gtk is not None:
                 if hotkey_result.warning and hasattr(window, "set_nonblocking_warning"):
                     window.set_nonblocking_warning(hotkey_result.warning)
             if auto_capture and hasattr(window, "trigger_shortcut_capture"):
+                LOGGER.info("hotkey.event.handled source=activation mode=shortcut-trigger")
                 window.trigger_shortcut_capture()
                 return
             if hasattr(window, "present_with_initial_center"):
@@ -244,6 +268,7 @@ if Gtk is not None:
             else:
                 window.present()
             if auto_capture:
+                LOGGER.info("hotkey.event.handled source=activation mode=idle-capture")
                 GLib.idle_add(self._trigger_auto_capture, window)
 else:
     class ScreenuxScreenshotApp:  # pragma: no cover
@@ -252,6 +277,7 @@ else:
 
 
 def main(argv: list[str]) -> int:
+    configure_logging()
     if "--help" in argv or "-h" in argv:
         _print_help()
         return 0
@@ -264,6 +290,8 @@ def main(argv: list[str]) -> int:
         print(f"Missing GTK4/PyGObject dependencies: {GI_IMPORT_ERROR}", file=sys.stderr)
         return 1
     _, auto_capture = _parse_cli_args(argv)
+    if auto_capture:
+        LOGGER.info("hotkey.event.detected source=main argv=%s", argv)
     app = ScreenuxScreenshotApp(auto_capture=auto_capture)
     return app.run(argv)
 

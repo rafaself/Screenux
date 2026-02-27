@@ -44,3 +44,9 @@ def test_hotkey_manager_persists_default_value_when_missing_from_config():
 
     assert result.shortcut == hotkey.DEFAULT_SHORTCUT
     assert state["global_hotkey"] == hotkey.DEFAULT_SHORTCUT
+
+
+def test_normalize_shortcut_accepts_printscreen_aliases_with_modifier_combo():
+    assert hotkey.normalize_shortcut("ctrl+printscreen") == "Ctrl+Print"
+    assert hotkey.normalize_shortcut("CTRL+PrtScn") == "Ctrl+Print"
+    assert hotkey.normalize_shortcut("Shift+Print Screen") == "Shift+Print"
