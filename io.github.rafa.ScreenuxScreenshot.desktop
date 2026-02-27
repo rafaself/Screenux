@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Screenux Screenshot
+Exec=screenux-screenshot
+Type=Application
+Terminal=false
+Categories=Utility;Graphics;

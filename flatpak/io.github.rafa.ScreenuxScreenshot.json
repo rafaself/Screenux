@@ -1,0 +1,32 @@
+{
+  "app-id": "io.github.rafa.ScreenuxScreenshot",
+  "runtime": "org.gnome.Platform",
+  "runtime-version": "47",
+  "sdk": "org.gnome.Sdk",
+  "command": "screenux-screenshot",
+  "finish-args": [
+    "--socket=wayland",
+    "--socket=fallback-x11",
+    "--share=ipc",
+    "--talk-name=org.freedesktop.portal.Desktop",
+    "--filesystem=xdg-desktop",
+    "--filesystem=home"
+  ],
+  "modules": [
+    {
+      "name": "screenux-screenshot",
+      "buildsystem": "simple",
+      "build-commands": [
+        "install -Dm755 screenux-screenshot /app/bin/screenux-screenshot",
+        "install -Dm755 src/screenux_screenshot.py /app/share/screenux/screenux_screenshot.py",
+        "install -Dm644 io.github.rafa.ScreenuxScreenshot.desktop /app/share/applications/io.github.rafa.ScreenuxScreenshot.desktop"
+      ],
+      "sources": [
+        {
+          "type": "dir",
+          "path": ".."
+        }
+      ]
+    }
+  ]
+}
