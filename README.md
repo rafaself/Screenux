@@ -216,3 +216,11 @@ Flatpak permissions stay intentionally narrow (portal access + Desktop filesyste
 - Screenshot sources are validated as local, readable `file://` URIs.
 - Config parsing is defensive (invalid/non-object/oversized files are ignored).
 - Save operations use exclusive file creation to avoid accidental overwrite.
+
+## 🤝 Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow and PR guidance.
+
+## 📄 License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
