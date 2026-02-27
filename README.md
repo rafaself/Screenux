@@ -115,6 +115,14 @@ Pipeline gates:
 
 These checks are intended to be required before merge/release so changes must satisfy code quality, security, and packaging requirements.
 
+Release artifact workflow:
+
+- `.github/workflows/release-artifacts.yml` runs on published releases (and manual dispatch).
+- Builds a Flatpak bundle: `screenux-screenshot.flatpak`.
+- Generates integrity metadata: `screenux-screenshot.flatpak.sha256`.
+- Verifies the generated bundle can be installed in CI before publishing artifacts.
+- Uploads both files to the workflow artifacts and attaches them to the GitHub Release.
+
 ## Packaging
 
 ### Docker (dev/build environment)

@@ -1,0 +1,67 @@
+name: Release Artifacts
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: release-artifacts-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  flatpak-bundle:
+    name: Build Flatpak Bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
+
+      - name: Configure Flathub remote
+        run: |
+          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+      - name: Install Flatpak runtime and SDK
+        run: |
+          flatpak install -y flathub org.gnome.Platform//47 org.gnome.Sdk//47
+
+      - name: Build Flatpak repo
+        run: |
+          flatpak-builder --force-clean --repo=repo build-dir flatpak/io.github.rafa.ScreenuxScreenshot.json
+
+      - name: Create bundle and checksum
+        run: |
+          flatpak build-bundle repo screenux-screenshot.flatpak io.github.rafa.ScreenuxScreenshot
+          sha256sum screenux-screenshot.flatpak > screenux-screenshot.flatpak.sha256
+
+      - name: Verify bundle installability
+        run: |
+          flatpak install -y --user ./screenux-screenshot.flatpak
+          flatpak info --user io.github.rafa.ScreenuxScreenshot > /dev/null
+          flatpak uninstall -y --user io.github.rafa.ScreenuxScreenshot
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-release-bundle
+          path: |
+            screenux-screenshot.flatpak
+            screenux-screenshot.flatpak.sha256
+
+      - name: Attach artifacts to GitHub Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            screenux-screenshot.flatpak
+            screenux-screenshot.flatpak.sha256
