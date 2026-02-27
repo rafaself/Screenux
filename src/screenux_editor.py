@@ -211,21 +211,28 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         toolbar.set_margin_start(8)
         toolbar.set_margin_end(8)
         toolbar.set_margin_top(8)
+        icon_dir = Path(__file__).resolve().parent / "icons"
 
-        def _tool_btn(label: str, tooltip: str, tool_name: str) -> Gtk.ToggleButton:
+        def _tool_btn(icon_file: str, fallback_label: str, tooltip: str, tool_name: str) -> Gtk.ToggleButton:
             btn = Gtk.ToggleButton()
-            btn.set_child(Gtk.Label(label=label))
+            icon_path = icon_dir / icon_file
+            if icon_path.is_file():
+                image = Gtk.Image.new_from_file(str(icon_path))
+                image.set_pixel_size(18)
+                btn.set_child(image)
+            else:
+                btn.set_child(Gtk.Label(label=fallback_label))
             btn.set_tooltip_text(tooltip)
             btn.connect("toggled", self._on_tool_toggled, tool_name)
             return btn
 
-        select_btn = _tool_btn("🖱", "Select / Move", "select")
-        rect_btn = _tool_btn("▭", "Rectangle", "rectangle")
-        fill_rect_btn = _tool_btn("▮", "Filled Rectangle", "fill_rectangle")
+        select_btn = _tool_btn("tool-select.svg", "⇱", "Select / Move", "select")
+        rect_btn = _tool_btn("tool-rectangle-outline.svg", "▭", "Rectangle", "rectangle")
+        fill_rect_btn = _tool_btn("tool-rectangle-fill.svg", "▮", "Filled Rectangle", "fill_rectangle")
         rect_btn.set_active(True)
-        circle_btn = _tool_btn("○", "Circle", "circle")
-        fill_circle_btn = _tool_btn("◉", "Filled Circle", "fill_circle")
-        text_btn = _tool_btn("✎", "Text", "text")
+        circle_btn = _tool_btn("tool-circle-outline.svg", "○", "Circle", "circle")
+        fill_circle_btn = _tool_btn("tool-circle-fill.svg", "◉", "Filled Circle", "fill_circle")
+        text_btn = _tool_btn("tool-text.svg", "✎", "Text", "text")
 
         rect_btn.set_group(select_btn)
         fill_rect_btn.set_group(select_btn)
@@ -337,6 +344,7 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
 
         copy_btn = _icon_label_button("edit-copy-symbolic", "Copy")
         copy_btn.set_tooltip_text("Copy to Clipboard (Ctrl+C)")
+        copy_btn.add_css_class("suggested-action")
         copy_btn.connect("clicked", lambda _: self._copy_to_clipboard())
 
         save_btn = _icon_label_button("document-save-symbolic", "Save")
@@ -353,8 +361,17 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         self._current_tool = "select"
         if hasattr(self, "_select_btn"):
             self._select_btn.set_active(True)
+        self._update_draw_cursor()
         if hasattr(self, "_drawing_area"):
             self._drawing_area.queue_draw()
+
+    def _update_draw_cursor(self) -> None:
+        if not hasattr(self, "_drawing_area"):
+            return
+        if self._current_tool in ("rectangle", "fill_rectangle", "circle", "fill_circle", "text"):
+            self._drawing_area.set_cursor_from_name("crosshair")
+        else:
+            self._drawing_area.set_cursor_from_name(None)
 
     def _render_output_surface(self):
         img_w = self._surface.get_width()
@@ -382,6 +399,7 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
     def _on_tool_toggled(self, button: Gtk.ToggleButton, tool_name: str) -> None:
         if button.get_active():
             self._current_tool = tool_name
+            self._update_draw_cursor()
             if tool_name != "select":
                 self._selected_index = None
             if hasattr(self, "_drawing_area"):
