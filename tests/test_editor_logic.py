@@ -122,7 +122,7 @@ class FakeEditorSelf:
         self._pan_y = 0.0
         self._surface = FakeSurface()
         self._source_uri = "file:///tmp/source.png"
-        self._build_output_path = lambda _uri: Path("/tmp/out.png")
+        self._build_output_path = lambda _uri: Path(f"/tmp/out_{id(self)}.png")
         self.saved = None
         self.error = None
         self._on_save = lambda p: setattr(self, "saved", p)
@@ -481,7 +481,7 @@ def test_editor_popover_scroll_zoom_save(monkeypatch):
 
     self._annotations = [{"kind": "rectangle", "x1": 0, "y1": 0, "x2": 1, "y2": 1, "color": (1, 0, 0, 1)}]
     editor.AnnotationEditor._do_save(self)
-    assert rendered and self.saved == Path("/tmp/out.png")
+    assert rendered and self.saved == Path(f"/tmp/out_{id(self)}.png")
 
 
 def test_editor_drag_end_ignores_invalid_selected_index():

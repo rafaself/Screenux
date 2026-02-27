@@ -9,6 +9,16 @@ Minimal Linux desktop screenshot app built with Python + GTK4 and xdg-desktop-po
 - Wayland-compatible capture through `org.freedesktop.portal.Screenshot`
 - Saves to Desktop with timestamped filename
 - Falls back to Home when Desktop is unavailable
+- Enforces offline-only runtime behavior (no network operations)
+- Uses secure, non-overwriting image writes and strict local file URI validation
+
+## Security Posture
+
+- Offline-only: Python-level networking and DNS resolution are blocked at runtime.
+- Least privilege: Flatpak requests only portal access and Desktop filesystem access (no full Home access).
+- Safe file handling: output writes use exclusive create mode to avoid overwriting existing files.
+- Defensive loading: screenshot sources must be local `file://` URIs that resolve to readable regular files.
+- Defensive config parsing: invalid, non-object, or oversized config files are ignored.
 
 ## Project Layout
 

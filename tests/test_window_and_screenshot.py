@@ -87,6 +87,7 @@ class FakeWindowSelf:
         )
         self._on_editor_save = lambda saved_path: window.MainWindow._on_editor_save(self, saved_path)
         self._on_editor_discard = lambda: window.MainWindow._on_editor_discard(self)
+        self._on_editor_error = lambda message: window.MainWindow._on_editor_error(self, message)
 
     def set_child(self, child):
         self._set_child_value = child
@@ -106,6 +107,16 @@ def test_window_top_level_helpers():
     wrapped = SimpleNamespace(unpack=lambda: "file:///tmp/x.png")
     assert window._extract_uri({"uri": wrapped}) == "file:///tmp/x.png"
     assert window._extract_uri({"uri": "file:///tmp/y.png"}) == "file:///tmp/y.png"
+
+
+def test_window_uri_to_local_path(tmp_path):
+    local = tmp_path / "cap.png"
+    local.write_bytes(b"x")
+
+    assert window._uri_to_local_path(f"file://{local}") == local.resolve()
+    assert window._uri_to_local_path("https://example.com/cap.png") is None
+    assert window._uri_to_local_path("file://remotehost/tmp/cap.png") is None
+    assert window._uri_to_local_path("file:///does/not/exist.png") is None
 
 
 def test_window_status_unsubscribe_finish_fail():
@@ -234,6 +245,7 @@ def test_window_save_uri_success_and_failure(monkeypatch):
     self._signal_sub_id = 3
 
     marker = object()
+    monkeypatch.setattr(window, "_uri_to_local_path", lambda _uri: Path("/tmp/test x.png"))
     monkeypatch.setattr(window, "load_image_surface", lambda _p: marker)
     monkeypatch.setattr(
         window,
@@ -253,6 +265,16 @@ def test_window_save_uri_success_and_failure(monkeypatch):
     monkeypatch.setattr(window, "load_image_surface", broken)
     window.MainWindow._save_uri(self, "file:///tmp/xx.png")
     assert self._status_label.text.startswith("Failed: could not load image")
+
+
+def test_window_save_uri_rejects_invalid_source(monkeypatch):
+    self = FakeWindowSelf()
+    self._bus = DummyBus()
+    self._signal_sub_id = 3
+
+    monkeypatch.setattr(window, "_uri_to_local_path", lambda _uri: None)
+    window.MainWindow._save_uri(self, "https://example.com/cap.png")
+    assert self._status_label.text == "Failed: invalid screenshot source path"
 
 
 def test_window_folder_selected(monkeypatch, tmp_path):
@@ -352,6 +374,9 @@ def test_window_portal_response_paths(monkeypatch):
 def test_screenshot_main_and_extension_helpers(monkeypatch, capsys, tmp_path):
     assert screenshot._extension_from_uri("file:///tmp/a.JPG") == ".jpg"
     assert screenshot._extension_from_uri("file:///tmp/noext") == ".png"
+    assert screenshot._extension_from_uri("file:///tmp/a.exe") == ".png"
+
+    monkeypatch.setattr(screenshot, "enforce_offline_mode", lambda: None)
 
     monkeypatch.setattr(screenshot, "GI_IMPORT_ERROR", RuntimeError("missing"))
     monkeypatch.setattr(screenshot, "Gtk", None)
@@ -380,3 +405,30 @@ def test_screenshot_main_and_extension_helpers(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(screenshot, "GLib", None)
     monkeypatch.setattr(screenshot.Path, "home", staticmethod(lambda: tmp_path / "home"))
     assert screenshot._config_path() == tmp_path / "home" / ".config" / "screenux" / "settings.json"
+
+
+def test_screenshot_enforce_offline_mode_blocks_network(monkeypatch):
+    original_socket = screenshot.socket.socket
+    original_create_connection = screenshot.socket.create_connection
+    original_getaddrinfo = screenshot.socket.getaddrinfo
+    original_gethostbyname = screenshot.socket.gethostbyname
+    original_gethostbyname_ex = screenshot.socket.gethostbyname_ex
+    original_gethostbyaddr = screenshot.socket.gethostbyaddr
+    original_getnameinfo = screenshot.socket.getnameinfo
+
+    screenshot.enforce_offline_mode()
+
+    try:
+        socket_obj = screenshot.socket.socket()
+        socket_obj.connect(("127.0.0.1", 80))
+        assert False
+    except RuntimeError as err:
+        assert "network access is disabled" in str(err)
+
+    monkeypatch.setattr(screenshot.socket, "socket", original_socket)
+    monkeypatch.setattr(screenshot.socket, "create_connection", original_create_connection)
+    monkeypatch.setattr(screenshot.socket, "getaddrinfo", original_getaddrinfo)
+    monkeypatch.setattr(screenshot.socket, "gethostbyname", original_gethostbyname)
+    monkeypatch.setattr(screenshot.socket, "gethostbyname_ex", original_gethostbyname_ex)
+    monkeypatch.setattr(screenshot.socket, "gethostbyaddr", original_gethostbyaddr)
+    monkeypatch.setattr(screenshot.socket, "getnameinfo", original_getnameinfo)

@@ -34,6 +34,31 @@ def _extract_uri(results: object) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def _uri_to_local_path(source_uri: str) -> Path | None:
+    parsed = urlparse(source_uri)
+    if parsed.scheme != "file":
+        return None
+    if parsed.netloc not in ("", "localhost"):
+        return None
+
+    decoded = unquote(parsed.path)
+    if not decoded:
+        return None
+
+    path = Path(decoded)
+    if not path.is_absolute():
+        return None
+
+    try:
+        resolved = path.resolve(strict=True)
+    except OSError:
+        return None
+
+    if not resolved.is_file() or not os.access(resolved, os.R_OK):
+        return None
+    return resolved
+
+
 class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
     def __init__(
         self,
@@ -200,9 +225,12 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
 
     def _save_uri(self, source_uri: str) -> None:
         self._unsubscribe_signal()
-        uri_path = unquote(urlparse(source_uri).path)
+        source_path = _uri_to_local_path(source_uri)
+        if source_path is None:
+            self._fail("invalid screenshot source path")
+            return
         try:
-            surface = load_image_surface(uri_path)
+            surface = load_image_surface(str(source_path))
         except Exception as err:
             self._fail(f"could not load image ({err})")
             return

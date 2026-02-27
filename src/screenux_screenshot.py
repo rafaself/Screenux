@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -21,6 +22,36 @@ except Exception as exc:  # pragma: no cover - handled at runtime
     Gtk = None  # type: ignore[assignment]  # pragma: no cover
 
 APP_ID = "io.github.rafa.ScreenuxScreenshot"
+_MAX_CONFIG_SIZE = 64 * 1024
+_ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
+
+
+def enforce_offline_mode() -> None:
+    blocked = RuntimeError("network access is disabled for this application")
+
+    def _raise_blocked(*_args, **_kwargs):
+        raise blocked
+
+    socket.create_connection = _raise_blocked  # type: ignore[assignment]
+    socket.getaddrinfo = _raise_blocked  # type: ignore[assignment]
+    socket.gethostbyname = _raise_blocked  # type: ignore[assignment]
+    socket.gethostbyname_ex = _raise_blocked  # type: ignore[assignment]
+    socket.gethostbyaddr = _raise_blocked  # type: ignore[assignment]
+    socket.getnameinfo = _raise_blocked  # type: ignore[assignment]
+
+    original_socket = socket.socket
+
+    class OfflineSocket(original_socket):
+        def connect(self, *_args, **_kwargs):
+            raise blocked
+
+        def connect_ex(self, *_args, **_kwargs):
+            raise blocked
+
+        def sendto(self, *_args, **_kwargs):
+            raise blocked
+
+    socket.socket = OfflineSocket  # type: ignore[assignment]
 
 
 def _config_path() -> Path:
@@ -33,6 +64,9 @@ def load_config() -> dict:
     path = _config_path()
     if path.is_file():
         try:
+            stat = path.stat()
+            if stat.st_size > _MAX_CONFIG_SIZE:
+                return {}
             config = json.loads(path.read_text(encoding="utf-8"))
             return config if isinstance(config, dict) else {}
         except (json.JSONDecodeError, OSError):
@@ -44,8 +78,27 @@ def save_config(config: dict) -> None:
     if not isinstance(config, dict):
         raise TypeError("config must be a dictionary")
     path = _config_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    try:
+        os.chmod(path.parent, 0o700)
+    except OSError:
+        pass
+
+    temp_path = path.with_name(f".{path.name}.tmp")
+    payload = json.dumps(config, indent=2)
+    fd = os.open(temp_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_path, path)
+    finally:
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
 
 def resolve_save_dir() -> Path:
@@ -70,12 +123,16 @@ def resolve_save_dir() -> Path:
 
 def _extension_from_uri(source_uri: str) -> str:
     suffix = Path(unquote(urlparse(source_uri).path)).suffix.lower()
-    return suffix if suffix else ".png"
+    return suffix if suffix in _ALLOWED_EXTENSIONS else ".png"
 
 
 def build_output_path(source_uri: str) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    return resolve_save_dir() / f"Screenshot_{timestamp}{_extension_from_uri(source_uri)}"
+    save_dir = resolve_save_dir().resolve()
+    output_path = (save_dir / f"Screenshot_{timestamp}{_extension_from_uri(source_uri)}").resolve()
+    if output_path.parent != save_dir:
+        raise ValueError("resolved output path escapes save directory")
+    return output_path
 
 
 def format_status_saved(path: Path) -> str:
@@ -114,6 +171,7 @@ else:
 
 
 def main(argv: list[str]) -> int:
+    enforce_offline_mode()
     if GI_IMPORT_ERROR is not None or Gtk is None or MainWindow is None:
         print(f"Missing GTK4/PyGObject dependencies: {GI_IMPORT_ERROR}", file=sys.stderr)
         return 1

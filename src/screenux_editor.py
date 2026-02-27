@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io as _io
 import math
+import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -134,6 +135,34 @@ def _make_text_annotation(text: str, position: Point, color: Color) -> Annotatio
         "color": color,
         "text": text,
     }
+
+
+def _write_surface_png_securely(surface, dest: Path) -> None:
+    destination = dest.expanduser().resolve()
+    parent = destination.parent
+    if not parent.is_dir():
+        raise RuntimeError("destination directory does not exist")
+
+    png_buffer = _io.BytesIO()
+    surface.write_to_png(png_buffer)
+    data = png_buffer.getvalue()
+
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+
+    fd = os.open(destination, flags, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except Exception:
+        try:
+            destination.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise
 
 
 class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
@@ -439,8 +468,8 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
             provider = Gdk.ContentProvider.new_for_bytes("image/png", bytes_value)
             clipboard = self.get_display().get_clipboard()
             clipboard.set_content(provider)
-        except Exception:
-            pass
+        except Exception as err:
+            self._on_error(f"could not copy image ({err})")
 
     def _on_tool_toggled(self, button: Gtk.ToggleButton, tool_name: str) -> None:
         if button.get_active():
@@ -753,7 +782,7 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         try:
             output = self._render_output_surface()
             dest = self._build_output_path(self._source_uri)
-            output.write_to_png(str(dest))
+            _write_surface_png_securely(output, dest)
             self._on_save(dest)
         except Exception as err:
             self._on_error(f"could not save image ({err})")

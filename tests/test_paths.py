@@ -126,6 +126,14 @@ def test_load_config_rejects_non_object_json(tmp_path, monkeypatch):
     assert app.load_config() == {}
 
 
+def test_load_config_rejects_oversized_file(tmp_path, monkeypatch):
+    config_file = tmp_path / "settings.json"
+    config_file.write_text("x" * (app._MAX_CONFIG_SIZE + 1), encoding="utf-8")
+    monkeypatch.setattr(app, "_config_path", lambda: config_file)
+
+    assert app.load_config() == {}
+
+
 def test_save_config_rejects_non_dict(tmp_path, monkeypatch):
     config_file = tmp_path / "screenux" / "settings.json"
     monkeypatch.setattr(app, "_config_path", lambda: config_file)
