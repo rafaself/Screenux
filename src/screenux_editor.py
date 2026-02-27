@@ -60,14 +60,16 @@ def _render_annotation(cr, ann: Annotation) -> None:
     cr.set_line_width(3.0)
     kind = ann["kind"]
 
-    if kind == "rectangle":
+    if kind in ("rectangle", "fill_rectangle"):
         x = min(ann["x1"], ann["x2"])
         y = min(ann["y1"], ann["y2"])
         w = abs(ann["x2"] - ann["x1"])
         h = abs(ann["y2"] - ann["y1"])
         cr.rectangle(x, y, w, h)
+        if kind == "fill_rectangle":
+            cr.fill_preserve()
         cr.stroke()
-    elif kind == "circle":
+    elif kind in ("circle", "fill_circle"):
         cx = (ann["x1"] + ann["x2"]) / 2
         cy = (ann["y1"] + ann["y2"]) / 2
         rx = abs(ann["x2"] - ann["x1"]) / 2
@@ -78,6 +80,8 @@ def _render_annotation(cr, ann: Annotation) -> None:
             cr.scale(rx, ry)
             cr.arc(0, 0, 1, 0, 2 * math.pi)
             cr.restore()
+            if kind == "fill_circle":
+                cr.fill_preserve()
             cr.stroke()
     elif kind == "text":
         cr.set_font_size(24)
@@ -215,18 +219,23 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
             btn.connect("toggled", self._on_tool_toggled, tool_name)
             return btn
 
-        select_btn = _tool_btn("←↖", "Select / Move", "select")
-        select_btn.set_child(Gtk.Label(label="⇱"))
+        select_btn = _tool_btn("🖱", "Select / Move", "select")
         rect_btn = _tool_btn("▭", "Rectangle", "rectangle")
+        fill_rect_btn = _tool_btn("▮", "Filled Rectangle", "fill_rectangle")
         rect_btn.set_active(True)
         circle_btn = _tool_btn("○", "Circle", "circle")
-        text_btn = _tool_btn("A", "Text", "text")
+        fill_circle_btn = _tool_btn("◉", "Filled Circle", "fill_circle")
+        text_btn = _tool_btn("✎", "Text", "text")
 
         rect_btn.set_group(select_btn)
+        fill_rect_btn.set_group(select_btn)
         circle_btn.set_group(select_btn)
+        fill_circle_btn.set_group(select_btn)
         text_btn.set_group(select_btn)
 
-        for btn in (select_btn, rect_btn, circle_btn, text_btn):
+        self._select_btn = select_btn
+
+        for btn in (select_btn, rect_btn, fill_rect_btn, circle_btn, fill_circle_btn, text_btn):
             toolbar.append(btn)
 
         toolbar.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
@@ -314,18 +323,61 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         actions.set_margin_bottom(8)
         actions.set_halign(Gtk.Align.END)
 
-        discard_btn = Gtk.Button.new_from_icon_name("user-trash-symbolic")
+        def _icon_label_button(icon_name: str, label: str) -> Gtk.Button:
+            btn = Gtk.Button()
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            row.append(Gtk.Image.new_from_icon_name(icon_name))
+            row.append(Gtk.Label(label=label))
+            btn.set_child(row)
+            return btn
+
+        discard_btn = _icon_label_button("user-trash-symbolic", "Discard")
         discard_btn.set_tooltip_text("Discard")
         discard_btn.connect("clicked", lambda _: self._on_discard())
 
-        save_btn = Gtk.Button.new_from_icon_name("document-save-symbolic")
+        copy_btn = _icon_label_button("edit-copy-symbolic", "Copy")
+        copy_btn.set_tooltip_text("Copy to Clipboard (Ctrl+C)")
+        copy_btn.connect("clicked", lambda _: self._copy_to_clipboard())
+
+        save_btn = _icon_label_button("document-save-symbolic", "Save")
         save_btn.set_tooltip_text("Save")
         save_btn.add_css_class("suggested-action")
         save_btn.connect("clicked", lambda _: self._do_save())
 
         actions.append(discard_btn)
+        actions.append(copy_btn)
         actions.append(save_btn)
         self.append(actions)
+
+    def _set_select_tool(self) -> None:
+        self._current_tool = "select"
+        if hasattr(self, "_select_btn"):
+            self._select_btn.set_active(True)
+        if hasattr(self, "_drawing_area"):
+            self._drawing_area.queue_draw()
+
+    def _render_output_surface(self):
+        img_w = self._surface.get_width()
+        img_h = self._surface.get_height()
+        output = cairo.ImageSurface(cairo.FORMAT_ARGB32, img_w, img_h)
+        cr = cairo.Context(output)
+        cr.set_source_surface(self._surface, 0, 0)
+        cr.paint()
+        for ann in self._annotations:
+            _render_annotation(cr, ann)
+        return output
+
+    def _copy_to_clipboard(self) -> None:
+        try:
+            output = self._render_output_surface()
+            png_buffer = _io.BytesIO()
+            output.write_to_png(png_buffer)
+            bytes_value = GLib.Bytes.new(png_buffer.getvalue())
+            provider = Gdk.ContentProvider.new_for_bytes("image/png", bytes_value)
+            clipboard = self.get_display().get_clipboard()
+            clipboard.set_content(provider)
+        except Exception:
+            pass
 
     def _on_tool_toggled(self, button: Gtk.ToggleButton, tool_name: str) -> None:
         if button.get_active():
@@ -436,7 +488,7 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
                 self._drawing_area.queue_draw()
             return
 
-        if self._current_tool in ("rectangle", "circle"):
+        if self._current_tool in ("rectangle", "fill_rectangle", "circle", "fill_circle"):
             self._widget_drag_start = (start_x, start_y)
             self._drag_start = (ix, iy)
             self._drag_end = (ix, iy)
@@ -502,6 +554,7 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
                     self._current_color,
                 )
             )
+            self._set_select_tool()
             self._drawing_area.queue_draw()
 
     def _on_mid_pan_begin(self, _gesture, start_x: float, start_y: float) -> None:
@@ -517,30 +570,50 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         self._pan_start_values = None
 
     def _on_click_released(self, _gesture, n_press: int, x: float, y: float) -> None:
-        if n_press != 1:
+        if n_press not in (1, 2):
             return
 
         ix, iy = self._widget_to_image(x, y)
 
         if self._current_tool == "select":
             hit = self._find_hit(ix, iy)
+            if n_press == 2 and hit is not None and self._annotations[hit]["kind"] == "text":
+                self._selected_index = hit
+                self._show_text_popover(x, y, ix, iy, hit)
+                self._drawing_area.queue_draw()
+                return
             self._selected_index = hit
             self._drawing_area.queue_draw()
             return
 
-        if self._current_tool == "text" and not self._dragging:
+        if n_press == 1 and self._current_tool == "text" and not self._dragging:
             self._show_text_popover(x, y, ix, iy)
 
-    def _show_text_popover(self, wx: float, wy: float, ix: float, iy: float) -> None:
+    def _show_text_popover(
+        self,
+        wx: float,
+        wy: float,
+        ix: float,
+        iy: float,
+        annotation_index: int | None = None,
+    ) -> None:
         popover = Gtk.Popover()
         entry = Gtk.Entry()
         entry.set_placeholder_text("Type text…")
+
+        if annotation_index is not None:
+            existing_text = self._annotations[annotation_index].get("text", "")
+            entry.set_text(existing_text)
 
         def on_activate(_entry):
             text = entry.get_text().strip()
             if text:
                 self._push_undo()
-                self._annotations.append(_make_text_annotation(text, (ix, iy), self._current_color))
+                if annotation_index is not None:
+                    self._annotations[annotation_index]["text"] = text
+                else:
+                    self._annotations.append(_make_text_annotation(text, (ix, iy), self._current_color))
+                    self._set_select_tool()
                 self._drawing_area.queue_draw()
             popover.popdown()
 
@@ -575,6 +648,12 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
             self._on_redo()
             return True
 
+        key_c = getattr(Gdk, "KEY_c", None)
+        key_C = getattr(Gdk, "KEY_C", None)
+        if ctrl and keyval in (key_c, key_C):
+            self._copy_to_clipboard()
+            return True
+
         return False
 
     def _on_scroll(self, ctrl, dx: float, dy: float) -> bool:
@@ -606,17 +685,7 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         self._drawing_area.queue_draw()
 
     def _do_save(self) -> None:
-        img_w = self._surface.get_width()
-        img_h = self._surface.get_height()
-        output = cairo.ImageSurface(cairo.FORMAT_ARGB32, img_w, img_h)
-        cr = cairo.Context(output)
-
-        cr.set_source_surface(self._surface, 0, 0)
-        cr.paint()
-
-        for ann in self._annotations:
-            _render_annotation(cr, ann)
-
+        output = self._render_output_surface()
         dest = self._build_output_path(self._source_uri)
         output.write_to_png(str(dest))
         self._on_save(dest)
