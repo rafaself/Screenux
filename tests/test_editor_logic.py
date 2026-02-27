@@ -282,6 +282,86 @@ def test_editor_core_methods(monkeypatch):
     assert editor.AnnotationEditor._annotation_moved(self, ann_a, ann_b)
 
 
+def test_create_color_button_uses_color_dialog_when_available(monkeypatch):
+    class DummyRGBAParsed:
+        def __init__(self):
+            self.parsed = None
+
+        def parse(self, text):
+            self.parsed = text
+            return True
+
+    class DummyColorDialog:
+        pass
+
+    class DummyColorDialogButton:
+        def __init__(self, dialog):
+            self.dialog = dialog
+            self.connected = []
+            self.rgba = None
+            self.tooltip = None
+
+        def connect(self, signal, _cb):
+            self.connected.append(signal)
+
+        def set_rgba(self, rgba):
+            self.rgba = rgba
+
+        def set_tooltip_text(self, text):
+            self.tooltip = text
+
+    monkeypatch.setattr(
+        editor,
+        "Gtk",
+        SimpleNamespace(ColorDialog=DummyColorDialog, ColorDialogButton=DummyColorDialogButton),
+    )
+    monkeypatch.setattr(editor, "Gdk", SimpleNamespace(RGBA=DummyRGBAParsed))
+
+    button = editor._create_color_button(lambda *_: None)
+
+    assert isinstance(button, DummyColorDialogButton)
+    assert isinstance(button.dialog, DummyColorDialog)
+    assert button.connected == ["notify::rgba"]
+    assert button.rgba.parsed == "red"
+    assert button.tooltip == "Annotation color"
+
+
+def test_create_color_button_falls_back_when_color_dialog_unavailable(monkeypatch):
+    class DummyRGBAParsed:
+        def __init__(self):
+            self.parsed = None
+
+        def parse(self, text):
+            self.parsed = text
+            return True
+
+    class DummyColorButton:
+        def __init__(self):
+            self.connected = []
+            self.rgba = None
+            self.tooltip = None
+
+        def connect(self, signal, _cb):
+            if signal == "notify::rgba":
+                raise TypeError("unknown signal")
+            self.connected.append(signal)
+
+        def set_rgba(self, rgba):
+            self.rgba = rgba
+
+        def set_tooltip_text(self, text):
+            self.tooltip = text
+
+    monkeypatch.setattr(editor, "Gtk", SimpleNamespace(ColorButton=DummyColorButton))
+    monkeypatch.setattr(editor, "Gdk", SimpleNamespace(RGBA=DummyRGBAParsed))
+
+    button = editor._create_color_button(lambda *_: None)
+
+    assert isinstance(button, DummyColorButton)
+    assert button.connected == ["color-set"]
+    assert button.rgba.parsed == "red"
+    assert button.tooltip == "Annotation color"
+
 def test_editor_draw_drag_click_and_keys(monkeypatch):
     self = FakeEditorSelf()
     self._surface = FakeSurface(100, 100)

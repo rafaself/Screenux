@@ -143,6 +143,30 @@ def _make_text_annotation(text: str, position: Point, color: Color) -> Annotatio
     }
 
 
+def _create_color_button(on_color_changed: Callable[..., None]):
+    rgba = Gdk.RGBA()
+    rgba.parse("red")
+
+    color_dialog_cls = getattr(Gtk, "ColorDialog", None)
+    color_dialog_button_cls = getattr(Gtk, "ColorDialogButton", None)
+    if callable(color_dialog_cls) and callable(color_dialog_button_cls):
+        color_btn = color_dialog_button_cls(dialog=color_dialog_cls())
+        color_btn.connect("notify::rgba", on_color_changed)
+    else:
+        color_button_cls = getattr(Gtk, "ColorButton", None)
+        if not callable(color_button_cls):
+            raise RuntimeError("no compatible GTK color picker found")
+        color_btn = color_button_cls()
+        try:
+            color_btn.connect("notify::rgba", on_color_changed)
+        except TypeError:
+            color_btn.connect("color-set", on_color_changed)
+
+    color_btn.set_rgba(rgba)
+    color_btn.set_tooltip_text("Annotation color")
+    return color_btn
+
+
 def _write_surface_png_securely(surface, dest: Path) -> None:
     destination = dest.expanduser().resolve()
     parent = destination.parent
@@ -293,13 +317,7 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
 
         toolbar.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
 
-        color_dialog = Gtk.ColorDialog()
-        self._color_btn = Gtk.ColorDialogButton(dialog=color_dialog)
-        rgba = Gdk.RGBA()
-        rgba.parse("red")
-        self._color_btn.set_rgba(rgba)
-        self._color_btn.connect("notify::rgba", self._on_color_changed)
-        self._color_btn.set_tooltip_text("Annotation color")
+        self._color_btn = _create_color_button(self._on_color_changed)
         toolbar.append(self._color_btn)
 
         toolbar.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
@@ -521,7 +539,7 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
             if hasattr(self, "_drawing_area"):
                 self._drawing_area.queue_draw()
 
-    def _on_color_changed(self, button: Gtk.ColorDialogButton, _pspec) -> None:
+    def _on_color_changed(self, button, _pspec=None) -> None:
         rgba = button.get_rgba()
         self._current_color = (rgba.red, rgba.green, rgba.blue, rgba.alpha)
 
