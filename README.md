@@ -45,14 +45,23 @@ cd Screenux
 
 If you built or downloaded a Screenux Flatpak bundle, use the installer helper:
 
+To build a local bundle first:
+
+```bash
+make build-flatpak-bundle FLATPAK_BUNDLE=./screenux-screenshot.flatpak
+```
+
 ```bash
 ./install-screenux.sh ./screenux-screenshot.flatpak "['<Control><Shift>s']"
+
+# if already installed for current user
+./install-screenux.sh
 ```
 
 Or with Make targets:
 
 ```bash
-make install-flatpak BUNDLE=./screenux-screenshot.flatpak
+make install-flatpak [BUNDLE=./screenux-screenshot.flatpak]
 ```
 
 Use Print Screen directly with Screenux (GNOME):
@@ -60,8 +69,14 @@ Use Print Screen directly with Screenux (GNOME):
 ```bash
 ./install-screenux.sh --print-screen ./screenux-screenshot.flatpak
 
+# if already installed for current user
+./install-screenux.sh --print-screen
+
 # or
-make install-print-screen BUNDLE=./screenux-screenshot.flatpak
+make install [BUNDLE=./screenux-screenshot.flatpak]
+
+# or (explicit target)
+make install-print-screen [BUNDLE=./screenux-screenshot.flatpak]
 ```
 
 Restore GNOME native Print Screen behavior:
@@ -75,8 +90,9 @@ make restore-native-print
 
 Notes:
 
-- The first argument is required and must be a local `.flatpak` file.
+- The first argument is optional only when Screenux is already installed for the current user; otherwise provide a local `.flatpak` file.
 - The second argument is optional and uses GNOME `gsettings` binding syntax.
+- If Screenux is already installed for the current user, bundle install is skipped and only wrapper/shortcut setup is applied.
 - On non-GNOME desktops, install still completes and shortcut setup is skipped.
 - `--restore-native-print` removes the Screenux custom GNOME shortcut and resets GNOME screenshot keybindings.
 - Installer internals are organized under `scripts/install/` with reusable helper modules.
@@ -191,6 +207,31 @@ Notes:
 - Python bytecode and pytest cache are disabled in container runs to reduce bind-mount noise/permission issues.
 
 ### Flatpak
+
+Requirements:
+
+- `flatpak`
+- `flatpak-builder`
+
+Install tools (examples):
+
+```bash
+# Debian/Ubuntu
+sudo apt-get install -y flatpak flatpak-builder
+
+# Fedora
+sudo dnf install -y flatpak flatpak-builder
+
+# Arch
+sudo pacman -S --needed flatpak flatpak-builder
+```
+
+Build a local bundle and install with Print Screen mapping:
+
+```bash
+make build-flatpak-bundle FLATPAK_BUNDLE=./screenux-screenshot.flatpak
+make install-print-screen BUNDLE=./screenux-screenshot.flatpak
+```
 
 ```bash
 flatpak-builder --force-clean build-dir flatpak/io.github.rafa.ScreenuxScreenshot.json

@@ -2,25 +2,49 @@ SHELL := /usr/bin/env bash
 
 INSTALLER := ./install-screenux.sh
 DEFAULT_KEYBINDING := ['<Control><Shift>s']
+FLATPAK_MANIFEST := flatpak/io.github.rafa.ScreenuxScreenshot.json
+FLATPAK_BUILD_DIR ?= build-dir
+FLATPAK_REPO_DIR ?= repo
+FLATPAK_BUNDLE ?= ./screenux-screenshot.flatpak
+BUNDLE ?= $(FLATPAK_BUNDLE)
 
-.PHONY: help install-flatpak install-print-screen restore-native-print check-install-scripts
+.PHONY: help build-flatpak-bundle install install-flatpak install-print-screen restore-native-print check-install-scripts
 
 help:
 	@echo "Screenux helper targets"
 	@echo ""
-	@echo "  make install-flatpak BUNDLE=./screenux-screenshot.flatpak [KEYBINDING=\"['Print']\"]"
-	@echo "  make install-print-screen BUNDLE=./screenux-screenshot.flatpak"
+	@echo "  make build-flatpak-bundle [FLATPAK_BUNDLE=./screenux-screenshot.flatpak]"
+	@echo "  make install [BUNDLE=./screenux-screenshot.flatpak]"
+	@echo "  make install-flatpak [BUNDLE=./screenux-screenshot.flatpak] [KEYBINDING=\"['Print']\"]"
+	@echo "  make install-print-screen [BUNDLE=./screenux-screenshot.flatpak]"
 	@echo "  make restore-native-print"
 	@echo "  make check-install-scripts"
 
+build-flatpak-bundle:
+	@command -v flatpak-builder >/dev/null 2>&1 || ( \
+		echo "flatpak-builder not found."; \
+		echo "Install it, then retry:"; \
+		echo "  Debian/Ubuntu: sudo apt-get install -y flatpak-builder flatpak"; \
+		echo "  Fedora:        sudo dnf install -y flatpak-builder flatpak"; \
+		echo "  Arch:          sudo pacman -S --needed flatpak-builder flatpak"; \
+		exit 1)
+	@flatpak-builder --force-clean --repo="$(FLATPAK_REPO_DIR)" "$(FLATPAK_BUILD_DIR)" "$(FLATPAK_MANIFEST)"
+	@flatpak build-bundle "$(FLATPAK_REPO_DIR)" "$(FLATPAK_BUNDLE)" io.github.rafa.ScreenuxScreenshot
+	@echo "Bundle created: $(FLATPAK_BUNDLE)"
+
 install-flatpak:
-	@test -n "$(BUNDLE)" || (echo "Usage: make install-flatpak BUNDLE=./screenux-screenshot.flatpak [KEYBINDING=\"['Print']\"]" && exit 1)
 	@binding="$(DEFAULT_KEYBINDING)"; \
 	if [[ -n "$(KEYBINDING)" ]]; then binding="$(KEYBINDING)"; fi; \
 	$(INSTALLER) "$(BUNDLE)" "$$binding"
 
+install:
+	@if [[ -f "$(BUNDLE)" ]]; then \
+		$(INSTALLER) --print-screen "$(BUNDLE)"; \
+	else \
+		$(INSTALLER) --print-screen; \
+	fi
+
 install-print-screen:
-	@test -n "$(BUNDLE)" || (echo "Usage: make install-print-screen BUNDLE=./screenux-screenshot.flatpak" && exit 1)
 	@$(INSTALLER) --print-screen "$(BUNDLE)"
 
 restore-native-print:

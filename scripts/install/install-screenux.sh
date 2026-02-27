@@ -8,11 +8,11 @@ source "${SCRIPT_DIR}/lib/gnome_shortcuts.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  ./install-screenux.sh [--print-screen] /path/to/screenux-screenshot.flatpak "['<Control><Shift>s']"
+  ./install-screenux.sh [--print-screen] [/path/to/screenux-screenshot.flatpak] "['<Control><Shift>s']"
   ./install-screenux.sh --restore-native-print
 
 Arguments:
-  1) Flatpak bundle path (required for install mode)
+  1) Flatpak bundle path (optional if Screenux is already installed for user)
   2) GNOME keybinding list syntax (optional, default: ['<Control><Shift>s'])
 
 Options:
@@ -22,7 +22,9 @@ Options:
 
 Examples:
   ./install-screenux.sh ./screenux-screenshot.flatpak
+  ./install-screenux.sh
   ./install-screenux.sh --print-screen ./screenux-screenshot.flatpak
+  ./install-screenux.sh --print-screen
   ./install-screenux.sh ./screenux-screenshot.flatpak "['Print']"
   ./install-screenux.sh --restore-native-print
 EOF
@@ -31,13 +33,18 @@ EOF
 install_bundle() {
   local flatpak_file="$1"
 
-  [[ -n "${flatpak_file}" ]] || fail "Provide the .flatpak bundle path as first argument."
-  [[ -f "${flatpak_file}" ]] || fail "File not found: ${flatpak_file}"
+  if ! command -v flatpak >/dev/null 2>&1; then
+    fail "Required command not found: flatpak. Install it first (Debian/Ubuntu): apt-get update && sudo apt-get install -y flatpak"
+  fi
 
-  check_command flatpak
-
-  echo "==> Installing Flatpak bundle: ${flatpak_file}"
-  flatpak install -y --user "${flatpak_file}"
+  if flatpak info --user "${APP_ID}" >/dev/null 2>&1; then
+    echo "==> ${APP_ID} is already installed for this user; skipping bundle install"
+  else
+    [[ -n "${flatpak_file}" ]] || fail "Screenux is not installed. Provide a local .flatpak bundle path as first argument."
+    [[ -f "${flatpak_file}" ]] || fail "File not found: ${flatpak_file}"
+    echo "==> Installing Flatpak bundle: ${flatpak_file}"
+    flatpak install -y --user "${flatpak_file}"
+  fi
 
   create_wrapper
   create_desktop_entry
