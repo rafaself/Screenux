@@ -9,23 +9,40 @@ concurrency:
   group: release-artifacts-${{ github.ref }}
   cancel-in-progress: false
 
-permissions:
-  contents: write
-
 jobs:
   flatpak-bundle:
     name: Build Flatpak Bundle
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Cache Flatpak and builder outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/flatpak
+            build-dir
+          key: ${{ runner.os }}-flatpak-${{ hashFiles('flatpak/io.github.rafa.ScreenuxScreenshot.json') }}
+          restore-keys: |
+            ${{ runner.os }}-flatpak-
+
       - name: Install Flatpak tooling
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder
+          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder jq
+
+      - name: Extract runtime metadata from manifest
+        run: |
+          MANIFEST="flatpak/io.github.rafa.ScreenuxScreenshot.json"
+          echo "APP_ID=$(jq -r '."app-id"' "$MANIFEST")" >> "$GITHUB_ENV"
+          echo "RUNTIME=$(jq -r '.runtime' "$MANIFEST")" >> "$GITHUB_ENV"
+          echo "RUNTIME_VERSION=$(jq -r '."runtime-version"' "$MANIFEST")" >> "$GITHUB_ENV"
+          echo "SDK=$(jq -r '.sdk' "$MANIFEST")" >> "$GITHUB_ENV"
 
       - name: Configure Flathub remote
         run: |
@@ -33,7 +50,7 @@ jobs:
 
       - name: Install Flatpak runtime and SDK
         run: |
-          flatpak install -y flathub org.gnome.Platform//47 org.gnome.Sdk//47
+          flatpak install -y --noninteractive flathub "${RUNTIME}//${RUNTIME_VERSION}" "${SDK}//${RUNTIME_VERSION}"
 
       - name: Build Flatpak repo
         run: |
@@ -41,14 +58,14 @@ jobs:
 
       - name: Create bundle and checksum
         run: |
-          flatpak build-bundle repo screenux-screenshot.flatpak io.github.rafa.ScreenuxScreenshot
+          flatpak build-bundle repo screenux-screenshot.flatpak "${APP_ID}"
           sha256sum screenux-screenshot.flatpak > screenux-screenshot.flatpak.sha256
 
       - name: Verify bundle installability
         run: |
-          flatpak install -y --user ./screenux-screenshot.flatpak
-          flatpak info --user io.github.rafa.ScreenuxScreenshot > /dev/null
-          flatpak uninstall -y --user io.github.rafa.ScreenuxScreenshot
+          flatpak install -y --noninteractive ./screenux-screenshot.flatpak
+          flatpak info "${APP_ID}" > /dev/null
+          flatpak uninstall -y --noninteractive "${APP_ID}"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
@@ -58,8 +75,21 @@ jobs:
             screenux-screenshot.flatpak
             screenux-screenshot.flatpak.sha256
 
+  attach-release-assets:
+    name: Attach Release Assets
+    if: github.event_name == 'release'
+    needs: flatpak-bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download bundle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: flatpak-release-bundle
+
       - name: Attach artifacts to GitHub Release
-        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: |

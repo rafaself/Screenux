@@ -118,10 +118,13 @@ These checks are intended to be required before merge/release so changes must sa
 Release artifact workflow:
 
 - `.github/workflows/release-artifacts.yml` runs on published releases (and manual dispatch).
+- Caches Flatpak state (`~/.local/share/flatpak`) and `build-dir` to speed up repeat builds.
+- Reads `app-id`, runtime, runtime version, and SDK directly from `flatpak/io.github.rafa.ScreenuxScreenshot.json`.
 - Builds a Flatpak bundle: `screenux-screenshot.flatpak`.
 - Generates integrity metadata: `screenux-screenshot.flatpak.sha256`.
 - Verifies the generated bundle can be installed in CI before publishing artifacts.
 - Uploads both files to the workflow artifacts and attaches them to the GitHub Release.
+- Uses least-privilege permissions: write access is scoped only to the release-asset attachment job.
 
 ## Packaging
 
