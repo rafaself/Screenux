@@ -10,7 +10,7 @@ import gi
 gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
-from gi.repository import Gdk, GdkPixbuf, Gtk
+from gi.repository import Gdk, GdkPixbuf, GLib, Gtk
 
 import cairo
 
@@ -212,14 +212,39 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         toolbar.set_margin_end(8)
         toolbar.set_margin_top(8)
         icon_dir = Path(__file__).resolve().parent / "icons"
+        self._tool_icon_bindings: list[tuple[Gtk.Image, Path, str]] = []
+
+        settings = Gtk.Settings.get_default()
+        if settings is not None:
+            settings.connect("notify::gtk-application-prefer-dark-theme", self._on_theme_changed)
+
+        def _load_svg_icon(image: Gtk.Image, icon_path: Path) -> None:
+            if not icon_path.is_file():
+                image.set_from_icon_name(None)
+                return
+            try:
+                fill = self._toolbar_icon_color()
+                svg = icon_path.read_text(encoding="utf-8").replace("currentColor", fill)
+                loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
+                loader.write(svg.encode("utf-8"))
+                loader.close()
+                pixbuf = loader.get_pixbuf()
+                if pixbuf is None:
+                    raise RuntimeError("failed to load icon pixbuf")
+                texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+                image.set_from_paintable(texture)
+            except Exception:
+                image.set_from_icon_name(None)
 
         def _tool_btn(icon_file: str, fallback_label: str, tooltip: str, tool_name: str) -> Gtk.ToggleButton:
             btn = Gtk.ToggleButton()
             icon_path = icon_dir / icon_file
+            image = Gtk.Image()
+            image.set_pixel_size(18)
             if icon_path.is_file():
-                image = Gtk.Image.new_from_file(str(icon_path))
-                image.set_pixel_size(18)
+                _load_svg_icon(image, icon_path)
                 btn.set_child(image)
+                self._tool_icon_bindings.append((image, icon_path, fallback_label))
             else:
                 btn.set_child(Gtk.Label(label=fallback_label))
             btn.set_tooltip_text(tooltip)
@@ -281,6 +306,30 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         toolbar.append(zoom_in_btn)
 
         self.append(toolbar)
+
+    def _toolbar_icon_color(self) -> str:
+        settings = Gtk.Settings.get_default()
+        is_dark = bool(settings.get_property("gtk-application-prefer-dark-theme")) if settings else False
+        return "#F5F7FA" if is_dark else "#111318"
+
+    def _on_theme_changed(self, *_args) -> None:
+        self._refresh_tool_icons()
+
+    def _refresh_tool_icons(self) -> None:
+        fill = self._toolbar_icon_color()
+        for image, icon_path, _fallback in getattr(self, "_tool_icon_bindings", []):
+            try:
+                svg = icon_path.read_text(encoding="utf-8").replace("currentColor", fill)
+                loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
+                loader.write(svg.encode("utf-8"))
+                loader.close()
+                pixbuf = loader.get_pixbuf()
+                if pixbuf is None:
+                    continue
+                texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+                image.set_from_paintable(texture)
+            except Exception:
+                continue
 
     def _build_canvas(self) -> None:
         self._drawing_area = Gtk.DrawingArea()
@@ -344,7 +393,6 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
 
         copy_btn = _icon_label_button("edit-copy-symbolic", "Copy")
         copy_btn.set_tooltip_text("Copy to Clipboard (Ctrl+C)")
-        copy_btn.add_css_class("suggested-action")
         copy_btn.connect("clicked", lambda _: self._copy_to_clipboard())
 
         save_btn = _icon_label_button("document-save-symbolic", "Save")
