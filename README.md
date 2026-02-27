@@ -41,6 +41,20 @@ cd Screenux
 ./screenux-screenshot
 ```
 
+### 4) Install Flatpak bundle + optional GNOME shortcut
+
+If you built or downloaded a Screenux Flatpak bundle, use the installer helper:
+
+```bash
+./install-screenux.sh ./screenux-screenshot.flatpak "['<Control><Shift>s']"
+```
+
+Notes:
+
+- The first argument is required and must be a local `.flatpak` file.
+- The second argument is optional and uses GNOME `gsettings` binding syntax.
+- On non-GNOME desktops, install still completes and shortcut setup is skipped.
+
 ## 🖱️ Usage
 
 1. Launch the app.
