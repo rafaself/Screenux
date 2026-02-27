@@ -151,6 +151,11 @@ def test_window_show_panel_and_editor_callbacks():
     window.MainWindow._on_editor_discard(self)
     assert self._status_label.text == "Ready"
 
+    window.MainWindow._on_editor_error(self, "save broke")
+    assert self._set_child_value is self._main_box
+    assert self._button.sensitive is True
+    assert self._status_label.text == "Failed: save broke"
+
 
 def test_window_take_screenshot_success_and_resubscribe(monkeypatch):
     self = FakeWindowSelf()
@@ -250,28 +255,54 @@ def test_window_save_uri_success_and_failure(monkeypatch):
     assert self._status_label.text.startswith("Failed: could not load image")
 
 
-def test_window_folder_selected(monkeypatch):
+def test_window_folder_selected(monkeypatch, tmp_path):
     self = FakeWindowSelf()
     saved = {}
     self._load_config = lambda: {"foo": "bar"}
     self._save_config = lambda cfg: saved.update(cfg)
     self._folder_label = DummyLabel()
 
-    fake_folder = SimpleNamespace(get_path=lambda: "/tmp/screens")
+    chosen_dir = tmp_path / "screens"
+    chosen_dir.mkdir()
+    fake_folder = SimpleNamespace(get_path=lambda: str(chosen_dir))
     fake_dialog = SimpleNamespace(select_folder_finish=lambda _r: fake_folder)
 
     fake_glib = SimpleNamespace(Error=DummyError)
     monkeypatch.setattr(window, "GLib", fake_glib)
 
     window.MainWindow._on_folder_selected(self, fake_dialog, object())
-    assert saved["save_dir"] == "/tmp/screens"
-    assert self._folder_label.text == "/tmp/screens"
+    assert saved["save_dir"] == str(chosen_dir)
+    assert self._folder_label.text == str(chosen_dir)
 
     class RaiseDialog:
         def select_folder_finish(self, _r):
             raise DummyError("cancel")
 
     window.MainWindow._on_folder_selected(self, RaiseDialog(), object())
+    assert self._status_label.text == "Failed: could not change folder (cancel)"
+
+
+def test_window_folder_selected_rejects_non_local_and_unwritable(monkeypatch, tmp_path):
+    self = FakeWindowSelf()
+    self._folder_label = DummyLabel()
+
+    fake_glib = SimpleNamespace(Error=DummyError)
+    monkeypatch.setattr(window, "GLib", fake_glib)
+
+    non_local_dialog = SimpleNamespace(
+        select_folder_finish=lambda _r: SimpleNamespace(get_path=lambda: None)
+    )
+    window.MainWindow._on_folder_selected(self, non_local_dialog, object())
+    assert self._status_label.text == "Failed: selected folder is not local"
+
+    unwritable = tmp_path / "screens"
+    unwritable.mkdir()
+    monkeypatch.setattr(window.os, "access", lambda *_args: False)
+    unwritable_dialog = SimpleNamespace(
+        select_folder_finish=lambda _r: SimpleNamespace(get_path=lambda: str(unwritable))
+    )
+    window.MainWindow._on_folder_selected(self, unwritable_dialog, object())
+    assert self._status_label.text == "Failed: selected folder is not writable"
 
 
 def test_window_portal_response_paths(monkeypatch):

@@ -116,3 +116,22 @@ def test_load_config_handles_corrupt_json(tmp_path, monkeypatch):
     monkeypatch.setattr(app, "_config_path", lambda: config_file)
 
     assert app.load_config() == {}
+
+
+def test_load_config_rejects_non_object_json(tmp_path, monkeypatch):
+    config_file = tmp_path / "settings.json"
+    config_file.write_text('["not", "an", "object"]', encoding="utf-8")
+    monkeypatch.setattr(app, "_config_path", lambda: config_file)
+
+    assert app.load_config() == {}
+
+
+def test_save_config_rejects_non_dict(tmp_path, monkeypatch):
+    config_file = tmp_path / "screenux" / "settings.json"
+    monkeypatch.setattr(app, "_config_path", lambda: config_file)
+
+    try:
+        app.save_config([])
+        assert False
+    except TypeError as err:
+        assert "config must be a dictionary" in str(err)

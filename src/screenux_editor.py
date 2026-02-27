@@ -144,6 +144,7 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         build_output_path: Callable[[str], Path],
         on_save: Callable[[Path], None],
         on_discard: Callable[[], None],
+        on_error: Callable[[str], None],
     ):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self._surface = surface
@@ -151,6 +152,7 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         self._build_output_path = build_output_path
         self._on_save = on_save
         self._on_discard = on_discard
+        self._on_error = on_error
 
         self._annotations: list[Annotation] = []
         self._undo_stack: list[list[Annotation]] = []
@@ -219,31 +221,13 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
             settings.connect("notify::gtk-application-prefer-dark-theme", self._on_theme_changed)
             settings.connect("notify::gtk-theme-name", self._on_theme_changed)
 
-        def _load_svg_icon(image: Gtk.Image, icon_path: Path) -> None:
-            if not icon_path.is_file():
-                image.set_from_icon_name(None)
-                return
-            try:
-                fill = self._toolbar_icon_color()
-                svg = icon_path.read_text(encoding="utf-8").replace("currentColor", fill)
-                loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
-                loader.write(svg.encode("utf-8"))
-                loader.close()
-                pixbuf = loader.get_pixbuf()
-                if pixbuf is None:
-                    raise RuntimeError("failed to load icon pixbuf")
-                texture = Gdk.Texture.new_for_pixbuf(pixbuf)
-                image.set_from_paintable(texture)
-            except Exception:
-                image.set_from_icon_name(None)
-
         def _tool_btn(icon_file: str, fallback_label: str, tooltip: str, tool_name: str) -> Gtk.ToggleButton:
             btn = Gtk.ToggleButton()
             icon_path = icon_dir / icon_file
             image = Gtk.Image()
             image.set_pixel_size(18)
             if icon_path.is_file():
-                _load_svg_icon(image, icon_path)
+                self._load_svg_icon(image, icon_path)
                 btn.set_child(image)
                 self._tool_icon_bindings.append((image, icon_path, fallback_label))
             else:
@@ -320,21 +304,30 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
     def _on_theme_changed(self, *_args) -> None:
         self._refresh_tool_icons()
 
+    def _load_svg_icon(self, image: Gtk.Image, icon_path: Path) -> bool:
+        if not icon_path.is_file():
+            image.set_from_icon_name(None)
+            return False
+        try:
+            fill = self._toolbar_icon_color()
+            svg = icon_path.read_text(encoding="utf-8").replace("currentColor", fill)
+            loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
+            loader.write(svg.encode("utf-8"))
+            loader.close()
+            pixbuf = loader.get_pixbuf()
+            if pixbuf is None:
+                image.set_from_icon_name(None)
+                return False
+            texture = Gdk.Texture.new_for_pixbuf(pixbuf)
+            image.set_from_paintable(texture)
+            return True
+        except Exception:
+            image.set_from_icon_name(None)
+            return False
+
     def _refresh_tool_icons(self) -> None:
-        fill = self._toolbar_icon_color()
         for image, icon_path, _fallback in getattr(self, "_tool_icon_bindings", []):
-            try:
-                svg = icon_path.read_text(encoding="utf-8").replace("currentColor", fill)
-                loader = GdkPixbuf.PixbufLoader.new_with_type("svg")
-                loader.write(svg.encode("utf-8"))
-                loader.close()
-                pixbuf = loader.get_pixbuf()
-                if pixbuf is None:
-                    continue
-                texture = Gdk.Texture.new_for_pixbuf(pixbuf)
-                image.set_from_paintable(texture)
-            except Exception:
-                continue
+            self._load_svg_icon(image, icon_path)
 
     def _build_canvas(self) -> None:
         self._drawing_area = Gtk.DrawingArea()
@@ -595,11 +588,12 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         if self._move_dragging:
             self._move_dragging = False
             if self._pre_move_snapshot is not None and self._move_orig_ann is not None:
-                ann = self._annotations[self._selected_index]
-                orig = self._move_orig_ann
-                if self._annotation_moved(ann, orig):
-                    self._undo_stack.append(self._pre_move_snapshot)
-                    self._redo_stack.clear()
+                if self._selected_index is not None and 0 <= self._selected_index < len(self._annotations):
+                    ann = self._annotations[self._selected_index]
+                    orig = self._move_orig_ann
+                    if self._annotation_moved(ann, orig):
+                        self._undo_stack.append(self._pre_move_snapshot)
+                        self._redo_stack.clear()
             self._pre_move_snapshot = None
             self._move_orig_ann = None
             self._drawing_area.queue_draw()
@@ -756,7 +750,10 @@ class AnnotationEditor(Gtk.Box):  # type: ignore[misc]
         self._drawing_area.queue_draw()
 
     def _do_save(self) -> None:
-        output = self._render_output_surface()
-        dest = self._build_output_path(self._source_uri)
-        output.write_to_png(str(dest))
-        self._on_save(dest)
+        try:
+            output = self._render_output_surface()
+            dest = self._build_output_path(self._source_uri)
+            output.write_to_png(str(dest))
+            self._on_save(dest)
+        except Exception as err:
+            self._on_error(f"could not save image ({err})")

@@ -121,12 +121,21 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
             folder = dialog.select_folder_finish(result)
             if folder:
                 path = folder.get_path()
+                if not path:
+                    self._fail("selected folder is not local")
+                    return
+                chosen_dir = Path(path)
+                if not chosen_dir.is_dir() or not os.access(chosen_dir, os.W_OK | os.X_OK):
+                    self._fail("selected folder is not writable")
+                    return
                 config = self._load_config()
                 config["save_dir"] = path
                 self._save_config(config)
                 self._folder_label.set_text(path)
-        except GLib.Error:
-            pass
+        except GLib.Error as err:
+            self._set_status(f"Failed: could not change folder ({err.message})")
+        except Exception as err:
+            self._set_status(f"Failed: could not change folder ({err})")
 
     def _on_take_screenshot(self, _button: Gtk.Button) -> None:
         self._button.set_sensitive(False)
@@ -204,6 +213,7 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
             build_output_path=self._build_output_path,
             on_save=self._on_editor_save,
             on_discard=self._on_editor_discard,
+            on_error=self._on_editor_error,
         )
         self.set_child(editor)
 
@@ -216,6 +226,11 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         self._show_main_panel()
         self._button.set_sensitive(True)
         self._set_status("Ready")
+
+    def _on_editor_error(self, message: str) -> None:
+        self._show_main_panel()
+        self._button.set_sensitive(True)
+        self._set_status(f"Failed: {message}")
 
     def _on_portal_response(
         self,

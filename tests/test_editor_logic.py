@@ -124,7 +124,9 @@ class FakeEditorSelf:
         self._source_uri = "file:///tmp/source.png"
         self._build_output_path = lambda _uri: Path("/tmp/out.png")
         self.saved = None
+        self.error = None
         self._on_save = lambda p: setattr(self, "saved", p)
+        self._on_error = lambda msg: setattr(self, "error", msg)
         self._on_discard = lambda: None
         self._push_undo = lambda: editor.AnnotationEditor._push_undo(self)
         self._update_viewport = lambda w, h: editor.AnnotationEditor._update_viewport(self, w, h)
@@ -480,3 +482,28 @@ def test_editor_popover_scroll_zoom_save(monkeypatch):
     self._annotations = [{"kind": "rectangle", "x1": 0, "y1": 0, "x2": 1, "y2": 1, "color": (1, 0, 0, 1)}]
     editor.AnnotationEditor._do_save(self)
     assert rendered and self.saved == Path("/tmp/out.png")
+
+
+def test_editor_drag_end_ignores_invalid_selected_index():
+    self = FakeEditorSelf()
+    self._move_dragging = True
+    self._selected_index = 3
+    self._annotations = [{"x1": 0, "y1": 0, "x2": 1, "y2": 1}]
+    self._pre_move_snapshot = []
+    self._move_orig_ann = {"x1": 0, "y1": 0, "x2": 1, "y2": 1}
+
+    editor.AnnotationEditor._on_drag_end(self, None, 0, 0)
+    assert self._move_dragging is False
+
+
+def test_editor_save_failure_reports_error(monkeypatch):
+    self = FakeEditorSelf()
+
+    class OutSurface:
+        def write_to_png(self, _path):
+            raise OSError("disk full")
+
+    self._render_output_surface = lambda: OutSurface()
+    editor.AnnotationEditor._do_save(self)
+
+    assert self.error == "could not save image (disk full)"

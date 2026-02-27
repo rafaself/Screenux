@@ -33,13 +33,16 @@ def load_config() -> dict:
     path = _config_path()
     if path.is_file():
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            config = json.loads(path.read_text(encoding="utf-8"))
+            return config if isinstance(config, dict) else {}
         except (json.JSONDecodeError, OSError):
             pass
     return {}
 
 
 def save_config(config: dict) -> None:
+    if not isinstance(config, dict):
+        raise TypeError("config must be a dictionary")
     path = _config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, indent=2), encoding="utf-8")
@@ -48,8 +51,8 @@ def save_config(config: dict) -> None:
 def resolve_save_dir() -> Path:
     config = load_config()
     custom_dir = config.get("save_dir")
-    if custom_dir:
-        custom_path = Path(custom_dir)
+    if isinstance(custom_dir, str) and custom_dir.strip():
+        custom_path = Path(custom_dir).expanduser()
         if custom_path.is_dir() and os.access(custom_path, os.W_OK | os.X_OK):
             return custom_path
 
