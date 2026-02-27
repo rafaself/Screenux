@@ -153,6 +153,11 @@ def _run_command(command: list[str], env: dict[str, str]) -> subprocess.Complete
 
 
 class InstallScriptTests(unittest.TestCase):
+    def test_installer_declares_shellcheck_source_paths_for_libraries(self):
+        content = (ROOT / "scripts/install/install-screenux.sh").read_text(encoding="utf-8")
+        self.assertIn("# shellcheck source=scripts/install/lib/common.sh", content)
+        self.assertIn("# shellcheck source=scripts/install/lib/gnome_shortcuts.sh", content)
+
     def test_installer_installs_bundle_and_creates_local_entries(self):
         tmpdir, env, log_file = _setup_mock_environment()
         bundle = tmpdir / "screenux.flatpak"
@@ -213,6 +218,11 @@ class InstallScriptTests(unittest.TestCase):
 
 
 class UninstallScriptTests(unittest.TestCase):
+    def test_uninstaller_declares_shellcheck_source_paths_for_libraries(self):
+        content = (ROOT / "scripts/install/uninstall-screenux.sh").read_text(encoding="utf-8")
+        self.assertIn("# shellcheck source=scripts/install/lib/common.sh", content)
+        self.assertIn("# shellcheck source=scripts/install/lib/gnome_shortcuts.sh", content)
+
     def test_uninstaller_removes_flatpak_and_local_artifacts_by_default(self):
         _, env, log_file = _setup_mock_environment(
             with_gsettings=True,

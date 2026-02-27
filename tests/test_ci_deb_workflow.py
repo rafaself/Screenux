@@ -33,6 +33,12 @@ class DebianCiWorkflowTests(unittest.TestCase):
             with self.subTest(snippet=snippet):
                 self.assertIn(snippet, content)
 
+    def test_ci_dependency_review_is_non_blocking_when_repo_feature_is_disabled(self):
+        content = CI_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("dependency-review:", content)
+        self.assertIn("uses: actions/dependency-review-action@v4", content)
+        self.assertIn("continue-on-error: true", content)
+
 
 if __name__ == "__main__":
     unittest.main()

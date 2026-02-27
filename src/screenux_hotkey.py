@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
+import subprocess  # nosec B404 - required for trusted local command invocation.
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Callable
@@ -56,7 +56,7 @@ class HotkeyRegistrationResult:
 
 
 def _default_runner(command: list[str]) -> object:
-    return subprocess.run(command, capture_output=True, text=True, check=False)
+    return subprocess.run(command, capture_output=True, text=True, check=False)  # nosec B603
 
 
 def _run(command: list[str], runner: Runner) -> object:

@@ -129,7 +129,14 @@ jobs:
 
     steps:
       - name: Review dependency changes
+        id: dependency_review
+        continue-on-error: true
         uses: actions/dependency-review-action@v4
+
+      - name: Warn when dependency review is unavailable
+        if: steps.dependency_review.outcome == 'failure'
+        run: |
+          echo "::warning::Dependency review is unavailable for this repository. Enable GitHub Dependency graph under Settings > Security to enforce this gate."
 
   tests:
     name: Test Suite
