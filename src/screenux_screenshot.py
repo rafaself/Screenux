@@ -31,6 +31,22 @@ LIGHT_ICON_NAME = f"{APP_ID}-light"
 DARK_ICON_NAME = f"{APP_ID}-dark"
 _MAX_CONFIG_SIZE = 64 * 1024
 _ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
+APP_VERSION = "0.1.0"
+
+
+def _print_help() -> None:
+    print(
+        "\n".join(
+            (
+                "Usage: screenux-screenshot [--capture] [--help] [--version]",
+                "",
+                "Options:",
+                "  --capture  Open app and trigger screenshot flow immediately",
+                "  --help     Show this help message",
+                "  --version  Show application version",
+            )
+        )
+    )
 
 
 def _prefers_dark_theme() -> bool:
@@ -235,6 +251,13 @@ else:
 
 
 def main(argv: list[str]) -> int:
+    if "--help" in argv or "-h" in argv:
+        _print_help()
+        return 0
+    if "--version" in argv:
+        print(APP_VERSION)
+        return 0
+
     enforce_offline_mode()
     if GI_IMPORT_ERROR is not None or Gtk is None or MainWindow is None:
         print(f"Missing GTK4/PyGObject dependencies: {GI_IMPORT_ERROR}", file=sys.stderr)

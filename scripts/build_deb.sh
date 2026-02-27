@@ -22,7 +22,7 @@ trap cleanup EXIT
 
 cd "${ROOT_DIR}"
 
-python3 -m venv "${VENV_DIR}"
+python3 -m venv --system-site-packages "${VENV_DIR}"
 "${VENV_DIR}/bin/pip" install --upgrade pip
 "${VENV_DIR}/bin/pip" install "pyinstaller==6.*"
 
@@ -32,6 +32,8 @@ rm -rf -- "${ROOT_DIR}/build" "${ROOT_DIR}/dist" "${ROOT_DIR}/${APP_NAME}.spec"
   --onefile \
   --name "${APP_NAME}" \
   --paths "${ROOT_DIR}/src" \
+  --collect-submodules "gi" \
+  --collect-data "gi" \
   --hidden-import "screenux_window" \
   --hidden-import "screenux_editor" \
   --hidden-import "screenux_hotkey" \

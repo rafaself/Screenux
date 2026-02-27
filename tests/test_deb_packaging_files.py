@@ -37,7 +37,7 @@ class DebianPackagingTests(unittest.TestCase):
 set -euo pipefail
 echo "python3 $*" >> "${MOCK_LOG_FILE}"
 if [[ "${1:-}" == "-m" && "${2:-}" == "venv" ]]; then
-  venv_path="${3}"
+  venv_path="${@: -1}"
   mkdir -p "${venv_path}/bin"
   cat > "${venv_path}/bin/pip" <<'EOF'
 #!/usr/bin/env bash

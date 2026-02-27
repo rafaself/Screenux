@@ -428,6 +428,19 @@ def test_screenshot_main_and_extension_helpers(monkeypatch, capsys, tmp_path):
     assert screenshot._config_path() == tmp_path / "home" / ".config" / "screenux" / "settings.json"
 
 
+def test_screenshot_help_and_version_do_not_require_gtk(monkeypatch, capsys):
+    monkeypatch.setattr(screenshot, "enforce_offline_mode", lambda: None)
+    monkeypatch.setattr(screenshot, "GI_IMPORT_ERROR", RuntimeError("missing"))
+    monkeypatch.setattr(screenshot, "Gtk", None)
+    monkeypatch.setattr(screenshot, "MainWindow", None)
+
+    assert screenshot.main(["screenux-screenshot", "--help"]) == 0
+    assert "Usage: screenux-screenshot" in capsys.readouterr().out
+
+    assert screenshot.main(["screenux-screenshot", "--version"]) == 0
+    assert screenshot.APP_VERSION in capsys.readouterr().out
+
+
 def test_screenshot_app_command_line_can_request_capture_on_existing_instance():
     if not hasattr(screenshot.ScreenuxScreenshotApp, "do_command_line"):
         return
