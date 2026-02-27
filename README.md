@@ -247,6 +247,10 @@ Expected artifact:
 
 - `dist-deb/screenux-screenshot_<version>_amd64.deb`
 
+Notes:
+
+- The `.deb` build uses project-local PyInstaller hooks in `packaging/pyinstaller_hooks/` to force GTK4 GI collection and avoid mixed GTK/Cairo runtime library mismatches.
+
 ### Flatpak
 
 Requirements:

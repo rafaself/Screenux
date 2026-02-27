@@ -7,6 +7,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DESKTOP_FILE = ROOT / "packaging" / "linux" / "screenux-screenshot.desktop"
 BUILD_SCRIPT = ROOT / "scripts" / "build_deb.sh"
+HOOKS_DIR = ROOT / "packaging" / "pyinstaller_hooks"
+GTK_HOOK = HOOKS_DIR / "hook-gi.repository.Gtk.py"
+GDK_HOOK = HOOKS_DIR / "hook-gi.repository.Gdk.py"
 
 
 def _write_executable(path: Path, content: str) -> None:
@@ -92,8 +95,19 @@ touch "${@: -1}"
 
             self.assertEqual(result.returncode, 0, msg=result.stderr)
             self.assertIn("pyinstaller --onefile", log)
+            self.assertIn("--additional-hooks-dir", log)
+            self.assertIn("packaging/pyinstaller_hooks", log)
+            self.assertNotIn("--collect-submodules gi", log)
+            self.assertNotIn("--collect-data gi", log)
             self.assertIn("dpkg-deb --build --root-owner-group", log)
             self.assertTrue((out_dir / "screenux-screenshot_9.9.9_amd64.deb").is_file())
+
+    def test_pyinstaller_gtk4_hooks_are_present(self):
+        gtk_content = GTK_HOOK.read_text(encoding="utf-8")
+        gdk_content = GDK_HOOK.read_text(encoding="utf-8")
+
+        self.assertIn('GiModuleInfo("Gtk", "4.0"', gtk_content)
+        self.assertIn('GiModuleInfo("Gdk", "4.0"', gdk_content)
 
 
 if __name__ == "__main__":

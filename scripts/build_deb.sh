@@ -32,8 +32,7 @@ rm -rf -- "${ROOT_DIR}/build" "${ROOT_DIR}/dist" "${ROOT_DIR}/${APP_NAME}.spec"
   --onefile \
   --name "${APP_NAME}" \
   --paths "${ROOT_DIR}/src" \
-  --collect-submodules "gi" \
-  --collect-data "gi" \
+  --additional-hooks-dir "${ROOT_DIR}/packaging/pyinstaller_hooks" \
   --hidden-import "screenux_window" \
   --hidden-import "screenux_editor" \
   --hidden-import "screenux_hotkey" \
@@ -41,6 +40,9 @@ rm -rf -- "${ROOT_DIR}/build" "${ROOT_DIR}/dist" "${ROOT_DIR}/${APP_NAME}.spec"
   --hidden-import "gi.repository.Gio" \
   --hidden-import "gi.repository.GLib" \
   --hidden-import "gi.repository.Gtk" \
+  --hidden-import "gi.repository.Gdk" \
+  --hidden-import "gi.repository.GdkPixbuf" \
+  --hidden-import "gi.repository.Pango" \
   --hidden-import "cairo" \
   --add-data "${ROOT_DIR}/src/icons:icons" \
   "${ROOT_DIR}/src/screenux_screenshot.py"
