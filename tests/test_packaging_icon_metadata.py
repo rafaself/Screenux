@@ -18,17 +18,21 @@ class PackagingIconMetadataTests(unittest.TestCase):
         manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
 
         build_commands = manifest["modules"][0]["build-commands"]
-        self.assertTrue(
-            any(
-                command.endswith(
-                    f" /app/share/icons/hicolor/scalable/apps/{APP_ID}.svg"
-                )
-                for command in build_commands
-            )
+        expected_targets = (
+            f"/app/share/icons/hicolor/scalable/apps/{APP_ID}.svg",
+            f"/app/share/icons/hicolor/scalable/apps/{APP_ID}-light.svg",
+            f"/app/share/icons/hicolor/scalable/apps/{APP_ID}-dark.svg",
         )
+        for target in expected_targets:
+            self.assertTrue(any(command.endswith(f" {target}") for command in build_commands))
 
-        icon_file = ROOT / "assets" / "icons" / f"{APP_ID}.svg"
-        self.assertTrue(icon_file.exists())
+        icon_files = (
+            ROOT / "assets" / "icons" / f"{APP_ID}.svg",
+            ROOT / "assets" / "icons" / f"{APP_ID}-light.svg",
+            ROOT / "assets" / "icons" / f"{APP_ID}-dark.svg",
+        )
+        for icon_file in icon_files:
+            self.assertTrue(icon_file.exists())
 
 
 if __name__ == "__main__":

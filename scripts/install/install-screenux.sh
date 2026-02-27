@@ -76,6 +76,8 @@ validate_installation() {
   [[ -x "${WRAPPER_PATH}" ]] || fail "Validation failed: wrapper not executable at ${WRAPPER_PATH}"
   [[ -f "${DESKTOP_FILE}" ]] || fail "Validation failed: desktop entry missing at ${DESKTOP_FILE}"
   [[ -f "${ICON_FILE}" ]] || fail "Validation failed: icon asset missing at ${ICON_FILE}"
+  [[ -f "${ICON_FILE_LIGHT}" ]] || fail "Validation failed: icon asset missing at ${ICON_FILE_LIGHT}"
+  [[ -f "${ICON_FILE_DARK}" ]] || fail "Validation failed: icon asset missing at ${ICON_FILE_DARK}"
 }
 
 configure_shortcut() {

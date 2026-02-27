@@ -9,10 +9,14 @@ DESKTOP_DIR="${HOME}/.local/share/applications"
 DESKTOP_FILE="${DESKTOP_DIR}/${APP_ID}.desktop"
 ICON_DIR="${HOME}/.local/share/icons/hicolor/scalable/apps"
 ICON_FILE="${ICON_DIR}/${APP_ID}.svg"
+ICON_FILE_LIGHT="${ICON_DIR}/${APP_ID}-light.svg"
+ICON_FILE_DARK="${ICON_DIR}/${APP_ID}-dark.svg"
 APP_DATA_DIR="${HOME}/.var/app/${APP_ID}"
 DEFAULT_BUNDLE_NAME="screenux-screenshot.flatpak"
 COMMON_LIB_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 APP_ICON_SOURCE="${COMMON_LIB_DIR}/../../../assets/icons/${APP_ID}.svg"
+APP_ICON_LIGHT_SOURCE="${COMMON_LIB_DIR}/../../../assets/icons/${APP_ID}-light.svg"
+APP_ICON_DARK_SOURCE="${COMMON_LIB_DIR}/../../../assets/icons/${APP_ID}-dark.svg"
 
 DEFAULT_KEYBINDING="['<Control><Shift>s']"
 PRINT_KEYBINDING="['Print']"
@@ -61,9 +65,13 @@ EOF
 
 create_icon_asset() {
   [[ -f "${APP_ICON_SOURCE}" ]] || fail "App icon source file not found: ${APP_ICON_SOURCE}"
+  [[ -f "${APP_ICON_LIGHT_SOURCE}" ]] || fail "App icon source file not found: ${APP_ICON_LIGHT_SOURCE}"
+  [[ -f "${APP_ICON_DARK_SOURCE}" ]] || fail "App icon source file not found: ${APP_ICON_DARK_SOURCE}"
   echo "==> Installing app icon: ${ICON_FILE}"
   mkdir -p "${ICON_DIR}"
   cp -f -- "${APP_ICON_SOURCE}" "${ICON_FILE}"
+  cp -f -- "${APP_ICON_LIGHT_SOURCE}" "${ICON_FILE_LIGHT}"
+  cp -f -- "${APP_ICON_DARK_SOURCE}" "${ICON_FILE_DARK}"
 }
 
 remove_wrapper() {
@@ -81,9 +89,9 @@ remove_desktop_entry() {
 }
 
 remove_icon_asset() {
-  if [[ -e "${ICON_FILE}" || -L "${ICON_FILE}" ]]; then
-    echo "==> Removing app icon: ${ICON_FILE}"
-    rm -f -- "${ICON_FILE}"
+  if [[ -e "${ICON_FILE}" || -L "${ICON_FILE}" || -e "${ICON_FILE_LIGHT}" || -L "${ICON_FILE_LIGHT}" || -e "${ICON_FILE_DARK}" || -L "${ICON_FILE_DARK}" ]]; then
+    echo "==> Removing app icon files from: ${ICON_DIR}"
+    rm -f -- "${ICON_FILE}" "${ICON_FILE_LIGHT}" "${ICON_FILE_DARK}"
   fi
 }
 
