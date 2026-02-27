@@ -3,7 +3,6 @@ name: Release Artifacts
 on:
   release:
     types: [published]
-  workflow_dispatch:
 
 concurrency:
   group: release-artifacts-${{ github.ref }}
