@@ -198,7 +198,7 @@ jobs:
 
           grep -Eq '/usr/bin/screenux-screenshot$' artifacts/deb-contents.txt || { echo "::error::Missing /usr/bin install path"; exit 1; }
           grep -Eq '/usr/share/applications/screenux-screenshot.desktop$' artifacts/deb-contents.txt || { echo "::error::Missing desktop entry install path"; exit 1; }
-          grep -Eq '/usr/share/icons/hicolor/256x256/apps/screenux-screenshot.png$' artifacts/deb-contents.txt || { echo "::error::Missing icon install path"; exit 1; }
+          grep -Eq '/usr/share/icons/hicolor/256x256/apps/io.github.rafa.ScreenuxScreenshot.png$' artifacts/deb-contents.txt || { echo "::error::Missing icon install path"; exit 1; }
 
           extract_dir="$(mktemp -d)"
           trap 'rm -rf "${extract_dir}"' EXIT
