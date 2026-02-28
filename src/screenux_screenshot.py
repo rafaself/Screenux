@@ -30,7 +30,7 @@ except Exception as exc:  # pragma: no cover - handled at runtime
 APP_ID = "io.github.rafa.ScreenuxScreenshot"
 _MAX_CONFIG_SIZE = 64 * 1024
 _ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
-APP_VERSION = "0.1.0"
+APP_VERSION = "1.0.0"
 _LOG_LEVEL_ENV = "SCREENUX_LOG_LEVEL"
 LOGGER = logging.getLogger("screenux.app")
 

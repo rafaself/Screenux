@@ -2,7 +2,7 @@ FROM debian:bookworm-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG APP_NAME=screenux-screenshot
-ARG APP_VERSION=0.1.0
+ARG APP_VERSION=1.0.0
 ARG APP_ARCH=amd64
 ARG OUT_DIR=/out
 
