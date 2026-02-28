@@ -24,6 +24,9 @@ class DummyButton:
     def set_sensitive(self, value):
         self.sensitive = value
 
+    def get_sensitive(self):
+        return self.sensitive
+
 
 class DummyEntry:
     def __init__(self, text=""):
@@ -77,11 +80,50 @@ class DummyVariant:
         return self.value
 
 
+class DummyPreviewWindow:
+    def __init__(self, title=None):
+        self.title = title
+        self.application = None
+        self.transient_for = None
+        self.default_size = None
+        self.child = None
+        self.present_calls = 0
+        self.close_calls = 0
+        self._close_request_handler = None
+
+    def set_application(self, app):
+        self.application = app
+
+    def set_transient_for(self, parent):
+        self.transient_for = parent
+
+    def set_default_size(self, width, height):
+        self.default_size = (width, height)
+
+    def set_child(self, child):
+        self.child = child
+
+    def connect(self, signal, callback):
+        if signal == "close-request":
+            self._close_request_handler = callback
+        return 1
+
+    def present(self):
+        self.present_calls += 1
+
+    def close(self):
+        self.close_calls += 1
+        if self._close_request_handler is not None:
+            self._close_request_handler(self)
+
+
 class FakeWindowSelf:
     def __init__(self):
         self._request_counter = 0
         self._bus = None
         self._signal_sub_id = None
+        self._preview_window = None
+        self._closing_preview_programmatically = False
         self._present_after_capture = False
         self._present_calls = 0
         self._button = DummyButton()
@@ -98,6 +140,8 @@ class FakeWindowSelf:
         self._finish = lambda status: window.MainWindow._finish(self, status)
         self._fail = lambda reason: window.MainWindow._fail(self, reason)
         self._show_main_panel = lambda: window.MainWindow._show_main_panel(self)
+        self._close_preview_window = lambda: window.MainWindow._close_preview_window(self)
+        self._on_preview_close_request = lambda preview_window: window.MainWindow._on_preview_close_request(self, preview_window)
         self._build_handle_token = lambda: window.MainWindow._build_handle_token(self)
         self._on_portal_response = (
             lambda connection, sender_name, object_path, interface_name, signal_name, parameters: window.MainWindow._on_portal_response(
@@ -119,6 +163,9 @@ class FakeWindowSelf:
 
     def present(self):
         self._present_calls += 1
+
+    def get_application(self):
+        return "app"
 
 
 def test_window_take_screenshot_public_method():
@@ -396,16 +443,22 @@ def test_window_show_panel_and_editor_callbacks():
     window.MainWindow._show_main_panel(self)
     assert self._set_child_value is self._main_box
 
+    self._preview_window = DummyPreviewWindow()
     window.MainWindow._on_editor_save(self, Path("/tmp/a.png"))
     assert self._set_child_value is self._main_box
+    assert self._preview_window is None
     assert self._button.sensitive is True
     assert self._status_label.text == "Saved: /tmp/a.png"
 
+    self._preview_window = DummyPreviewWindow()
     window.MainWindow._on_editor_discard(self)
+    assert self._preview_window is None
     assert self._status_label.text == "Ready"
 
+    self._preview_window = DummyPreviewWindow()
     window.MainWindow._on_editor_error(self, "save broke")
     assert self._set_child_value is self._main_box
+    assert self._preview_window is None
     assert self._button.sensitive is True
     assert self._status_label.text == "Failed: save broke"
 
@@ -485,6 +538,8 @@ def test_window_save_uri_success_and_failure(monkeypatch):
     self = FakeWindowSelf()
     self._bus = DummyBus()
     self._signal_sub_id = 3
+    fake_gtk = SimpleNamespace(Window=DummyPreviewWindow)
+    monkeypatch.setattr(window, "Gtk", fake_gtk)
 
     marker = object()
     monkeypatch.setattr(window, "_uri_to_local_path", lambda _uri: Path("/tmp/test x.png"))
@@ -496,7 +551,10 @@ def test_window_save_uri_success_and_failure(monkeypatch):
     )
 
     window.MainWindow._save_uri(self, "file:///tmp/test%20x.png")
-    assert isinstance(self._set_child_value, dict)
+    assert self._set_child_value is None
+    assert isinstance(self._preview_window, DummyPreviewWindow)
+    assert isinstance(self._preview_window.child, dict)
+    assert self._preview_window.present_calls == 1
     assert self._bus.unsubscribe_calls == [3]
 
     self._signal_sub_id = None
@@ -507,6 +565,20 @@ def test_window_save_uri_success_and_failure(monkeypatch):
     monkeypatch.setattr(window, "load_image_surface", broken)
     window.MainWindow._save_uri(self, "file:///tmp/xx.png")
     assert self._status_label.text.startswith("Failed: could not load image")
+
+
+def test_window_preview_close_request_restores_main_ready_state():
+    self = FakeWindowSelf()
+    self._preview_window = DummyPreviewWindow()
+    self._button.set_sensitive(False)
+    self._status_label.set_text("Capturing...")
+
+    keep_open = window.MainWindow._on_preview_close_request(self, self._preview_window)
+
+    assert keep_open is False
+    assert self._preview_window is None
+    assert self._button.sensitive is True
+    assert self._status_label.text == "Ready"
 
 
 def test_window_save_uri_rejects_invalid_source(monkeypatch):

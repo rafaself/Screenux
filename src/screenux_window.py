@@ -171,6 +171,8 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         self._hotkey_value_label: Gtk.Label | None = None
         self._present_after_capture = False
         self._did_initial_center = False
+        self._preview_window: Gtk.Window | None = None
+        self._closing_preview_programmatically = False
 
         self._main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self._main_box.set_margin_top(16)
@@ -397,6 +399,31 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
     def _show_main_panel(self) -> None:
         self.set_child(self._main_box)
 
+    def _close_preview_window(self) -> None:
+        preview_window = self._preview_window
+        if preview_window is None:
+            return
+        self._closing_preview_programmatically = True
+        try:
+            preview_window.close()
+        finally:
+            self._closing_preview_programmatically = False
+            self._preview_window = None
+
+    def _on_preview_close_request(self, _preview_window: Gtk.Window) -> bool:
+        self._preview_window = None
+        if self._closing_preview_programmatically:
+            return False
+        button_sensitive = (
+            self._button.get_sensitive()
+            if hasattr(self._button, "get_sensitive")
+            else getattr(self._button, "sensitive", True)
+        )
+        if not button_sensitive:
+            self._button.set_sensitive(True)
+            self._set_status("Ready")
+        return False
+
     def _on_change_folder(self, _button: Gtk.Button) -> None:
         dialog = Gtk.FileDialog()
         dialog.set_title("Choose Screenshot Folder")
@@ -505,7 +532,18 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
             on_discard=self._on_editor_discard,
             on_error=self._on_editor_error,
         )
-        self.set_child(editor)
+        self._close_preview_window()
+        preview_window = Gtk.Window(title="Screenshot Preview")
+        app = self.get_application() if hasattr(self, "get_application") else None
+        if app is not None and hasattr(preview_window, "set_application"):
+            preview_window.set_application(app)
+        if hasattr(preview_window, "set_transient_for"):
+            preview_window.set_transient_for(self)
+        preview_window.set_default_size(1024, 700)
+        preview_window.set_child(editor)
+        preview_window.connect("close-request", self._on_preview_close_request)
+        self._preview_window = preview_window
+        preview_window.present()
         if getattr(self, "_present_after_capture", False):
             if hasattr(self, "present_with_initial_center"):
                 self.present_with_initial_center()
@@ -515,16 +553,19 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
 
     def _on_editor_save(self, saved_path: Path) -> None:
         self._show_main_panel()
+        self._close_preview_window()
         self._button.set_sensitive(True)
         self._set_status(self._format_status_saved(saved_path))
 
     def _on_editor_discard(self) -> None:
         self._show_main_panel()
+        self._close_preview_window()
         self._button.set_sensitive(True)
         self._set_status("Ready")
 
     def _on_editor_error(self, message: str) -> None:
         self._show_main_panel()
+        self._close_preview_window()
         self._button.set_sensitive(True)
         self._set_status(f"Failed: {message}")
 
