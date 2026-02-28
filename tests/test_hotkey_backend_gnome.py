@@ -332,3 +332,74 @@ def test_register_gnome_shortcut_emits_telemetry_logs(caplog):
     assert "hotkey.register.start" in caplog.text
     assert "hotkey.register.resolve" in caplog.text
     assert "hotkey.register.persisted" in caplog.text
+
+
+def test_register_gnome_shortcut_disable_restores_native_print_bindings():
+    calls: list[list[str]] = []
+    existing_path = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
+    mapping = {
+        ("gsettings", "--version"): (0, "2.76.0\n", ""),
+        ("gsettings", "list-schemas"): (
+            0,
+            "\n".join(
+                [
+                    hotkey.GNOME_MEDIA_SCHEMA,
+                    hotkey.GNOME_CUSTOM_SCHEMA,
+                    hotkey.GNOME_SHELL_SCHEMA,
+                ]
+            )
+            + "\n",
+            "",
+        ),
+        ("gsettings", "list-keys", hotkey.GNOME_SHELL_SCHEMA): (
+            0,
+            "\n".join(["show-screenshot-ui", "screenshot", "screenshot-window"]) + "\n",
+            "",
+        ),
+        ("gsettings", "list-keys", hotkey.GNOME_MEDIA_SCHEMA): (
+            0,
+            "\n".join(["custom-keybindings", "screenshot", "window-screenshot", "area-screenshot"]) + "\n",
+            "",
+        ),
+        ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, hotkey.GNOME_CUSTOM_KEY): (
+            0,
+            f"['{existing_path}']\n",
+            "",
+        ),
+        ("gsettings", "get", f"{hotkey.GNOME_CUSTOM_SCHEMA}:{existing_path}", "name"): (
+            0,
+            "'Screenux Screenshot'\n",
+            "",
+        ),
+        ("gsettings", "get", f"{hotkey.GNOME_CUSTOM_SCHEMA}:{existing_path}", "command"): (
+            0,
+            "'/usr/bin/screenux-screenshot --capture'\n",
+            "",
+        ),
+    }
+    runner = _make_runner(mapping, calls)
+
+    result = hotkey.register_gnome_shortcut(None, runner=runner)
+
+    assert result.shortcut is None
+    assert any(
+        command
+        == [
+            "gsettings",
+            "set",
+            hotkey.GNOME_MEDIA_SCHEMA,
+            hotkey.GNOME_CUSTOM_KEY,
+            "[]",
+        ]
+        for command in calls
+    )
+    assert any(
+        command
+        == [
+            "gsettings",
+            "reset",
+            hotkey.GNOME_SHELL_SCHEMA,
+            "show-screenshot-ui",
+        ]
+        for command in calls
+    )

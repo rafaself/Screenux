@@ -264,6 +264,16 @@ def test_window_hotkey_capture_builds_shortcut_from_key_event(monkeypatch):
     assert consumed_modifier is True
     assert self._hotkey_entry.text == "Ctrl + Shift + S"
 
+    consumed_print = window.MainWindow._on_hotkey_entry_key_pressed(
+        self,
+        None,
+        1111,
+        0,
+        0,
+    )
+    assert consumed_print is True
+    assert self._hotkey_entry.text == "Print"
+
 
 def test_window_hotkey_capture_ignores_unmapped_key(monkeypatch):
     fake_gdk = SimpleNamespace(

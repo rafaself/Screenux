@@ -143,7 +143,7 @@ Global hotkey behavior:
 - Shortcut config is stored at `~/.config/screenux/settings.json` as `global_hotkey` (`null` disables it).
 - While the shortcut field is focused, press the key combo and Screenux builds it automatically (example: `Ctrl + S`).
 - You can apply with `Enter` or `Apply`.
-- You can return to default with `Default`, or clear/disable with `Clear`.
+- You can return to default with `Default`, or clear/disable with `Clear` (on GNOME this also restores native Print screenshot bindings).
 - Set `SCREENUX_LOG_LEVEL=INFO` to emit hotkey telemetry to stderr (registration resolution and `--capture` detection/handling) when debugging shortcut issues.
 
 ## 🖼️ UI example

@@ -47,7 +47,22 @@ _GSETTINGS_MODIFIER = {
 _NATIVE_SHORTCUT_KEYS = (
     (GNOME_SHELL_SCHEMA, "show-screenshot"),
     (GNOME_SHELL_SCHEMA, "show-screenshot-ui"),
+    (GNOME_SHELL_SCHEMA, "screenshot"),
+    (GNOME_SHELL_SCHEMA, "screenshot-window"),
     (GNOME_SHELL_SCHEMA, "show-screen-recording-ui"),
+    (GNOME_MEDIA_SCHEMA, "screenshot"),
+    (GNOME_MEDIA_SCHEMA, "window-screenshot"),
+    (GNOME_MEDIA_SCHEMA, "area-screenshot"),
+    (GNOME_MEDIA_SCHEMA, "screenshot-clip"),
+    (GNOME_MEDIA_SCHEMA, "window-screenshot-clip"),
+    (GNOME_MEDIA_SCHEMA, "area-screenshot-clip"),
+)
+
+_NATIVE_PRINT_RESET_KEYS = (
+    (GNOME_SHELL_SCHEMA, "show-screenshot"),
+    (GNOME_SHELL_SCHEMA, "show-screenshot-ui"),
+    (GNOME_SHELL_SCHEMA, "screenshot"),
+    (GNOME_SHELL_SCHEMA, "screenshot-window"),
     (GNOME_MEDIA_SCHEMA, "screenshot"),
     (GNOME_MEDIA_SCHEMA, "window-screenshot"),
     (GNOME_MEDIA_SCHEMA, "area-screenshot"),
@@ -134,7 +149,7 @@ def _normalize_key_token(token: str) -> str:
     if upper == "PRINT":
         return "Print"
     compact = re.sub(r"[\s_-]+", "", upper)
-    if compact in {"PRINTSCREEN", "PRTSC", "PRTSCN"}:
+    if compact in {"PRINTSCREEN", "PRTSC", "PRTSCN", "SYSREQ"}:
         return "Print"
     if upper.startswith("F") and upper[1:].isdigit():
         return upper
@@ -291,6 +306,11 @@ def _gsettings_set(schema: str, key: str, value: str, runner: Runner) -> bool:
     return _success(result)
 
 
+def _gsettings_reset(schema: str, key: str, runner: Runner) -> bool:
+    result = _run(["gsettings", "reset", schema, key], runner)
+    return _success(result)
+
+
 def _gsettings_available(runner: Runner) -> bool:
     result = _run(["gsettings", "--version"], runner)
     return _success(result)
@@ -298,6 +318,13 @@ def _gsettings_available(runner: Runner) -> bool:
 
 def _build_gsettings_list(paths: list[str]) -> str:
     return "[" + ", ".join(f"'{path}'" for path in paths) + "]"
+
+
+def _key_exists(schema: str, key: str, runner: Runner) -> bool:
+    result = _run(["gsettings", "list-keys", schema], runner)
+    if not _success(result):
+        return False
+    return key in _stdout(result).splitlines()
 
 
 def _custom_paths(runner: Runner) -> list[str]:
@@ -386,6 +413,27 @@ def _remove_screenux_shortcut(paths: list[str], runner: Runner) -> None:
     _gsettings_set(GNOME_MEDIA_SCHEMA, GNOME_CUSTOM_KEY, _build_gsettings_list(updated_paths), runner)
 
 
+def _remove_screenux_shortcut_entry(paths: list[str], runner: Runner) -> bool:
+    screenux_path = _find_screenux_custom_path(paths, runner)
+    if screenux_path is None:
+        return False
+    updated_paths = [path for path in paths if path != screenux_path]
+    _gsettings_set(GNOME_MEDIA_SCHEMA, GNOME_CUSTOM_KEY, _build_gsettings_list(updated_paths), runner)
+    return True
+
+
+def _restore_native_print_bindings(runner: Runner) -> list[str]:
+    restored: list[str] = []
+    for schema, key in _NATIVE_PRINT_RESET_KEYS:
+        if not _schema_exists(schema, runner):
+            continue
+        if not _key_exists(schema, key, runner):
+            continue
+        if _gsettings_reset(schema, key, runner):
+            restored.append(f"{schema}:{key}")
+    return restored
+
+
 def _next_available_custom_path(paths: list[str]) -> str:
     index = 0
     existing = set(paths)
@@ -412,7 +460,9 @@ def register_gnome_shortcut(
     screenux_path = _find_screenux_custom_path(paths, runner)
 
     if shortcut is None:
-        _remove_screenux_shortcut(paths, runner)
+        removed = _remove_screenux_shortcut_entry(paths, runner)
+        restored_native = _restore_native_print_bindings(runner) if removed else []
+        _log_telemetry("register.restore-native", restored=restored_native)
         _log_telemetry("register.disabled")
         return HotkeyRegistrationResult(None, None)
 
