@@ -8,18 +8,18 @@ source "${SCRIPT_DIR}/lib/common.sh"
 source "${SCRIPT_DIR}/lib/gnome_shortcuts.sh"
 
 DEFAULT_BUNDLE_NAME="screenux-screenshot.flatpak"
-PRINT_KEYBINDING="['Print']"
+PRINT_KEYBINDING="Print"
 
 usage() {
   cat << 'EOF'
 Usage:
-  ./install-screenux.sh [--bundle /path/to/screenux-screenshot.flatpak] [--shortcut "['<Control><Shift>s']"]
+  ./install-screenux.sh [--bundle /path/to/screenux-screenshot.flatpak] [--shortcut "<Control><Shift>s"]
   ./install-screenux.sh [--bundle /path/to/screenux-screenshot.flatpak] --print-screen
 
 Options:
   --bundle PATH           Flatpak bundle path. If omitted and app is not installed, tries ./screenux-screenshot.flatpak
-  --shortcut BINDING      Configure GNOME shortcut with gsettings list syntax
-  --print-screen          Shortcut preset for ['Print'] + disable native GNOME Print bindings
+  --shortcut BINDING      Configure GNOME shortcut accelerator string (for example: <Control><Shift>s)
+  --print-screen          Shortcut preset for Print + disable native GNOME Print bindings
   --no-shortcut           Skip shortcut setup (default)
   -h, --help              Show this help
 
@@ -27,7 +27,7 @@ Examples:
   ./install-screenux.sh
   ./install-screenux.sh --bundle ./screenux-screenshot.flatpak
   ./install-screenux.sh --bundle ./screenux-screenshot.flatpak --print-screen
-  ./install-screenux.sh --bundle ./screenux-screenshot.flatpak --shortcut "['<Control><Shift>s']"
+  ./install-screenux.sh --bundle ./screenux-screenshot.flatpak --shortcut "<Control><Shift>s"
 EOF
 }
 
@@ -127,7 +127,7 @@ main() {
         ;;
       --shortcut)
         shift
-        (($# > 0)) || fail "--shortcut requires a binding list value"
+        (($# > 0)) || fail "--shortcut requires an accelerator string value"
         [[ "${shortcut_option_seen}" == "false" ]] || fail "Only one of --shortcut, --print-screen, or --no-shortcut can be used."
         shortcut_option_seen="true"
         shortcut_mode="custom"

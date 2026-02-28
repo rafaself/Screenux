@@ -214,7 +214,7 @@ class InstallScriptTests(unittest.TestCase):
             log,
         )
         self.assertIn(
-            "gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ binding ['Print']",
+            "gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ binding Print",
             log,
         )
 

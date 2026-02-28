@@ -41,7 +41,7 @@ def test_collect_gnome_taken_shortcuts_parses_custom_and_native_bindings():
         ),
         ("gsettings", "get", f"{hotkey.GNOME_CUSTOM_SCHEMA}:{custom_path}", "binding"): (
             0,
-            "['<Control>Print']\n",
+            "'<Control>Print'\n",
             "",
         ),
         ("gsettings", "get", hotkey.GNOME_SHELL_SCHEMA, "show-screenshot"): (0, "['Print']\n", ""),
@@ -94,7 +94,7 @@ def test_register_gnome_shortcut_sets_command_and_uses_fallback_when_conflicting
         ),
         ("gsettings", "get", f"{hotkey.GNOME_CUSTOM_SCHEMA}:{existing_path}", "binding"): (
             0,
-            "['<Control>Print']\n",
+            "'<Control>Print'\n",
             "",
         ),
         ("gsettings", "get", hotkey.GNOME_SHELL_SCHEMA, "show-screenshot"): (0, "[]\n", ""),
@@ -130,7 +130,7 @@ def test_register_gnome_shortcut_sets_command_and_uses_fallback_when_conflicting
             "set",
             f"{hotkey.GNOME_CUSTOM_SCHEMA}:{new_path}",
             "binding",
-            "['<Control><Shift>s']",
+            "<Control><Shift>s",
         ]
         for command in calls
     )
@@ -158,7 +158,7 @@ def test_collect_gnome_taken_shortcuts_includes_native_clip_bindings():
         ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "screenshot"): (0, "[]\n", ""),
         ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "window-screenshot"): (0, "[]\n", ""),
         ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "area-screenshot"): (0, "[]\n", ""),
-        ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "screenshot-clip"): (0, "['<Control>Print']\n", ""),
+        ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "screenshot-clip"): (0, "'<Control>Print'\n", ""),
         ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "window-screenshot-clip"): (0, "[]\n", ""),
         ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "area-screenshot-clip"): (0, "[]\n", ""),
     }
@@ -193,7 +193,7 @@ def test_register_gnome_shortcut_uses_fallback_when_native_clip_binding_cannot_b
         ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "screenshot"): (0, "[]\n", ""),
         ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "window-screenshot"): (0, "[]\n", ""),
         ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "area-screenshot"): (0, "[]\n", ""),
-        ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "screenshot-clip"): (0, "['<Control>Print']\n", ""),
+        ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "screenshot-clip"): (0, "'<Control>Print'\n", ""),
         ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "window-screenshot-clip"): (0, "[]\n", ""),
         ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "area-screenshot-clip"): (0, "[]\n", ""),
         ("gsettings", "set", hotkey.GNOME_MEDIA_SCHEMA, "screenshot-clip", "[]"): (1, "", "permission denied"),
@@ -212,7 +212,7 @@ def test_register_gnome_shortcut_uses_fallback_when_native_clip_binding_cannot_b
             "set",
             f"{hotkey.GNOME_CUSTOM_SCHEMA}:{new_path}",
             "binding",
-            "['<Control><Shift>s']",
+            "<Control><Shift>s",
         ]
         for command in calls
     )
@@ -245,7 +245,7 @@ def test_register_gnome_shortcut_reclaims_native_clip_shortcut_when_requested():
         ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "window-screenshot-clip"): (0, "[]\n", ""),
         ("gsettings", "get", hotkey.GNOME_MEDIA_SCHEMA, "area-screenshot-clip"): (0, "[]\n", ""),
     }
-    state = {"clip_binding": "['<Control>Print']\n"}
+    state = {"clip_binding": "'<Control>Print'\n"}
 
     def runner(command: list[str]):
         calls.append(command)

@@ -269,7 +269,7 @@ def shortcut_to_gsettings_binding(shortcut: str) -> str:
     modifiers = parts[:-1]
     modifier_prefix = "".join(_GSETTINGS_MODIFIER[item] for item in modifiers)
     key_token = key.lower() if len(key) == 1 else key
-    return f"['{modifier_prefix}{key_token}']"
+    return f"{modifier_prefix}{key_token}"
 
 
 def _schema_exists(schema: str, runner: Runner) -> bool:

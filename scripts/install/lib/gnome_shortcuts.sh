@@ -168,8 +168,8 @@ configure_gnome_shortcut() {
     return 0
   fi
 
-  if [[ "${binding}" != \[*\] ]]; then
-    fail "Keybinding must be a gsettings list, e.g. \"['Print']\" or \"['<Super>s']\""
+  if [[ "${binding}" == \[*\] ]]; then
+    fail "Keybinding must be an accelerator string, e.g. \"Print\" or \"<Super>s\""
   fi
 
   echo "==> Configuring GNOME custom shortcut: ${binding}"
