@@ -3,7 +3,10 @@ from __future__ import annotations
 import logging
 import os
 import re
+import shlex
+import shutil
 import subprocess  # nosec B404 - required for trusted local command invocation.
+import sys
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Callable
@@ -85,6 +88,39 @@ def _log_telemetry(event: str, **fields: object) -> None:
         LOGGER.info("hotkey.%s %s", event, details)
         return
     LOGGER.info("hotkey.%s", event)
+
+
+def _resolve_capture_command() -> str:
+    configured = os.environ.get("SCREENUX_CAPTURE_COMMAND", "").strip()
+    if configured:
+        return configured
+
+    executable = shutil.which("screenux-screenshot")
+    if executable:
+        return f"{shlex.quote(executable)} --capture"
+
+    argv0 = (sys.argv[0] or "").strip()
+    if argv0:
+        resolved = argv0 if os.path.isabs(argv0) else (shutil.which(argv0) or argv0)
+        if os.path.basename(resolved) == "screenux-screenshot":
+            return f"{shlex.quote(resolved)} --capture"
+
+    return SCREENUX_CAPTURE_COMMAND
+
+
+def _is_screenux_capture_command(command: str) -> bool:
+    text = command.strip()
+    if not text:
+        return False
+    if text == SCREENUX_CAPTURE_COMMAND:
+        return True
+    try:
+        parts = shlex.split(text)
+    except ValueError:
+        return False
+    if len(parts) < 2 or parts[-1] != "--capture":
+        return False
+    return any(os.path.basename(part) == "screenux-screenshot" for part in parts[:-1])
 
 
 def _normalize_key_token(token: str) -> str:
@@ -285,7 +321,7 @@ def _find_screenux_custom_path(paths: list[str], runner: Runner) -> str | None:
         schema = f"{GNOME_CUSTOM_SCHEMA}:{path}"
         current_name = _strip_single_quotes(_gsettings_get(schema, "name", runner))
         current_command = _strip_single_quotes(_gsettings_get(schema, "command", runner))
-        if current_name == SCREENUX_SHORTCUT_NAME or current_command == SCREENUX_CAPTURE_COMMAND:
+        if current_name == SCREENUX_SHORTCUT_NAME or _is_screenux_capture_command(current_command):
             return path
     return None
 
@@ -418,13 +454,15 @@ def register_gnome_shortcut(
         _gsettings_set(GNOME_MEDIA_SCHEMA, GNOME_CUSTOM_KEY, _build_gsettings_list(paths), runner)
 
     target_schema = f"{GNOME_CUSTOM_SCHEMA}:{target_path}"
+    capture_command = _resolve_capture_command()
     name_set = _gsettings_set(target_schema, "name", SCREENUX_SHORTCUT_NAME, runner)
-    command_set = _gsettings_set(target_schema, "command", SCREENUX_CAPTURE_COMMAND, runner)
+    command_set = _gsettings_set(target_schema, "command", capture_command, runner)
     binding_value = shortcut_to_gsettings_binding(resolved)
     binding_set = _gsettings_set(target_schema, "binding", binding_value, runner)
     _log_telemetry(
         "register.persisted",
         binding=binding_value,
+        command=capture_command,
         command_set=command_set,
         name_set=name_set,
         path=target_path,

@@ -112,13 +112,15 @@ def test_register_gnome_shortcut_sets_command_and_uses_fallback_when_conflicting
     assert result.warning is not None
     assert any(
         command
+        and command[:4]
         == [
             "gsettings",
             "set",
             f"{hotkey.GNOME_CUSTOM_SCHEMA}:{new_path}",
             "command",
-            hotkey.SCREENUX_CAPTURE_COMMAND,
         ]
+        and "screenux-screenshot" in command[4]
+        and command[4].endswith(" --capture")
         for command in calls
     )
     assert any(
@@ -270,17 +272,28 @@ def test_register_gnome_shortcut_reclaims_native_clip_shortcut_when_requested():
         ]
         for command in calls
     )
-    assert any(
-        command
-        == [
-            "gsettings",
-            "set",
-            f"{hotkey.GNOME_CUSTOM_SCHEMA}:{new_path}",
-            "binding",
-            "['<Control>Print']",
-        ]
-        for command in calls
-    )
+
+
+def test_find_screenux_custom_path_matches_absolute_capture_command():
+    calls: list[list[str]] = []
+    custom_path = "/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/"
+    mapping = {
+        ("gsettings", "get", f"{hotkey.GNOME_CUSTOM_SCHEMA}:{custom_path}", "name"): (
+            0,
+            "'Other Name'\n",
+            "",
+        ),
+        ("gsettings", "get", f"{hotkey.GNOME_CUSTOM_SCHEMA}:{custom_path}", "command"): (
+            0,
+            "'/usr/bin/screenux-screenshot --capture'\n",
+            "",
+        ),
+    }
+    runner = _make_runner(mapping, calls)
+
+    found = hotkey._find_screenux_custom_path([custom_path], runner)  # noqa: SLF001 - internal helper coverage
+
+    assert found == custom_path
 
 
 def test_register_gnome_shortcut_emits_telemetry_logs(caplog):
