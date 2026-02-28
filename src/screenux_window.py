@@ -8,15 +8,95 @@ from typing import Any, Callable
 
 import gi
 
+gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gio, GLib, Gtk, Pango
+from gi.repository import Gdk, Gio, GLib, Gtk, Pango
 
 from screenux_editor import AnnotationEditor, load_image_surface
+from screenux_hotkey import DEFAULT_SHORTCUT, normalize_shortcut
 
 PORTAL_DEST = "org.freedesktop.portal.Desktop"
 PORTAL_PATH = "/org/freedesktop/portal/desktop"
 PORTAL_SCREENSHOT_IFACE = "org.freedesktop.portal.Screenshot"
 PORTAL_REQUEST_IFACE = "org.freedesktop.portal.Request"
+_DEFAULT_WINDOW_WIDTH = 520
+_DEFAULT_WINDOW_HEIGHT = 220
+
+
+def _initial_window_size() -> tuple[int, int]:
+    return (_DEFAULT_WINDOW_WIDTH, _DEFAULT_WINDOW_HEIGHT)
+
+
+def _center_position(
+    *,
+    monitor_x: int,
+    monitor_y: int,
+    monitor_width: int,
+    monitor_height: int,
+    window_width: int,
+    window_height: int,
+) -> tuple[int, int]:
+    return (
+        monitor_x + (monitor_width - window_width) // 2,
+        monitor_y + (monitor_height - window_height) // 2,
+    )
+
+
+def _shortcut_display_text(shortcut: str) -> str:
+    return shortcut.replace("+", " + ")
+
+
+def _shortcut_modifiers_from_state(state: int) -> list[str]:
+    modifiers: list[str] = []
+    mapping = (
+        (Gdk.ModifierType.CONTROL_MASK, "Ctrl"),
+        (Gdk.ModifierType.ALT_MASK, "Alt"),
+        (Gdk.ModifierType.SHIFT_MASK, "Shift"),
+        (Gdk.ModifierType.SUPER_MASK, "Super"),
+    )
+    for mask, token in mapping:
+        if state & mask:
+            modifiers.append(token)
+    return modifiers
+
+
+def _is_modifier_keyval(keyval: int) -> bool:
+    modifier_keys = (
+        Gdk.KEY_Control_L,
+        Gdk.KEY_Control_R,
+        Gdk.KEY_Shift_L,
+        Gdk.KEY_Shift_R,
+        Gdk.KEY_Alt_L,
+        Gdk.KEY_Alt_R,
+        Gdk.KEY_Super_L,
+        Gdk.KEY_Super_R,
+        Gdk.KEY_Meta_L,
+        Gdk.KEY_Meta_R,
+    )
+    return keyval in modifier_keys
+
+
+def _shortcut_key_token_from_keyval(keyval: int) -> str | None:
+    if _is_modifier_keyval(keyval):
+        return None
+    if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+        return "Enter"
+    if keyval == Gdk.KEY_ISO_Left_Tab:
+        return "Tab"
+
+    key_name = Gdk.keyval_name(keyval) or ""
+    if not key_name:
+        return None
+    if key_name in ("space", "Space"):
+        return "Space"
+
+    if key_name.startswith("KP_") and len(key_name) == 4 and key_name[-1].isdigit():
+        return key_name[-1]
+
+    compact = key_name.replace("_", "")
+    if len(compact) == 1:
+        return compact.upper()
+    return compact
 
 
 def _normalize_bus_name(unique_name: str) -> str:
@@ -74,7 +154,8 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
     ):
         super().__init__(application=app, title="Screenux Screenshot")
         self.set_icon_name(icon_name)
-        self.set_default_size(360, 180)
+        width, height = _initial_window_size()
+        self.set_default_size(width, height)
 
         self._resolve_save_dir = resolve_save_dir
         self._load_config = load_config
@@ -88,6 +169,10 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         self._signal_sub_id: int | None = None
         self._hotkey_entry: Gtk.Entry | None = None
         self._hotkey_value_label: Gtk.Label | None = None
+        self._present_after_capture = False
+        self._did_initial_center = False
+        self._preview_window: Gtk.Window | None = None
+        self._closing_preview_programmatically = False
 
         self._main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self._main_box.set_margin_top(16)
@@ -144,14 +229,22 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         edit_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self._hotkey_entry = Gtk.Entry()
         self._hotkey_entry.set_hexpand(True)
-        self._hotkey_entry.set_placeholder_text("Ctrl+Shift+S")
+        self._hotkey_entry.set_placeholder_text(DEFAULT_SHORTCUT)
+        self._hotkey_entry.connect("activate", self._on_hotkey_entry_activate)
+        key_controller = Gtk.EventControllerKey()
+        key_controller.connect("key-pressed", self._on_hotkey_entry_key_pressed)
+        self._hotkey_entry.add_controller(key_controller)
         edit_row.append(self._hotkey_entry)
 
         apply_btn = Gtk.Button(label="Apply")
         apply_btn.connect("clicked", self._on_hotkey_apply)
         edit_row.append(apply_btn)
 
-        disable_btn = Gtk.Button(label="Disable")
+        default_btn = Gtk.Button(label="Default")
+        default_btn.connect("clicked", self._on_hotkey_restore_default)
+        edit_row.append(default_btn)
+
+        disable_btn = Gtk.Button(label="Clear")
         disable_btn.connect("clicked", self._on_hotkey_disable)
         edit_row.append(disable_btn)
 
@@ -165,13 +258,13 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         if self._hotkey_value_label is not None:
             self._hotkey_value_label.set_text(current or "Disabled")
         if self._hotkey_entry is not None:
-            self._hotkey_entry.set_text(current or "")
+            self._hotkey_entry.set_text(_shortcut_display_text(current) if current else "")
 
     def _apply_hotkey_result(self, result: Any) -> None:
         if self._hotkey_value_label is not None:
             self._hotkey_value_label.set_text(result.shortcut or "Disabled")
         if self._hotkey_entry is not None:
-            self._hotkey_entry.set_text(result.shortcut or "")
+            self._hotkey_entry.set_text(_shortcut_display_text(result.shortcut) if result.shortcut else "")
         if result.warning:
             self.set_nonblocking_warning(result.warning)
             return
@@ -182,7 +275,7 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
             return
         user_value = self._hotkey_entry.get_text().strip()
         if not user_value:
-            self._set_status("Failed: shortcut cannot be empty (use Disable)")
+            self._set_status("Failed: shortcut cannot be empty (use Clear)")
             return
         try:
             result = self._hotkey_manager.apply_shortcut(user_value)
@@ -191,11 +284,91 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
             return
         self._apply_hotkey_result(result)
 
+    def _on_hotkey_entry_key_pressed(
+        self,
+        _controller: Gtk.EventControllerKey,
+        keyval: int,
+        _keycode: int,
+        state: int,
+    ) -> bool:
+        if self._hotkey_entry is None:
+            return False
+        if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+            return False
+
+        key_token = _shortcut_key_token_from_keyval(keyval)
+        if key_token is None:
+            return True
+
+        candidate = "+".join([*_shortcut_modifiers_from_state(state), key_token])
+        try:
+            normalized = normalize_shortcut(candidate)
+        except ValueError as err:
+            self._set_status(f"Failed: invalid shortcut ({err})")
+            return True
+
+        self._hotkey_entry.set_text(_shortcut_display_text(normalized))
+        self._hotkey_entry.set_position(-1)
+        self._set_status("Ready")
+        return True
+
+    def _on_hotkey_entry_activate(self, _entry: Gtk.Entry) -> None:
+        self._on_hotkey_apply(_entry)
+
+    def _on_hotkey_restore_default(self, _button: Gtk.Button) -> None:
+        if self._hotkey_manager is None:
+            return
+        result = self._hotkey_manager.apply_shortcut(DEFAULT_SHORTCUT)
+        self._apply_hotkey_result(result)
+
     def _on_hotkey_disable(self, _button: Gtk.Button) -> None:
         if self._hotkey_manager is None:
             return
         result = self._hotkey_manager.disable_shortcut()
         self._apply_hotkey_result(result)
+
+    def trigger_shortcut_capture(self) -> None:
+        self._present_after_capture = True
+        self.take_screenshot()
+
+    def center_on_screen_once(self) -> None:
+        if self._did_initial_center:
+            return
+        if self._try_center_window():
+            self._did_initial_center = True
+
+    def _try_center_window(self) -> bool:
+        try:
+            surface = self.get_surface()
+            if surface is None:
+                return False
+            display = surface.get_display() if hasattr(surface, "get_display") else None
+            if display is None or not hasattr(display, "get_monitor_at_surface"):
+                return False
+            monitor = display.get_monitor_at_surface(surface)
+            if monitor is None or not hasattr(monitor, "get_geometry"):
+                return False
+            geometry = monitor.get_geometry()
+            width, height = _initial_window_size()
+            x, y = _center_position(
+                monitor_x=int(getattr(geometry, "x", 0)),
+                monitor_y=int(getattr(geometry, "y", 0)),
+                monitor_width=int(getattr(geometry, "width", width)),
+                monitor_height=int(getattr(geometry, "height", height)),
+                window_width=width,
+                window_height=height,
+            )
+            mover = surface if hasattr(surface, "move") else self
+            if not hasattr(mover, "move"):
+                return False
+            mover.move(x, y)
+            return True
+        except Exception:
+            return False
+
+    def present_with_initial_center(self) -> None:
+        self.center_on_screen_once()
+        self.present()
 
     def _build_handle_token(self) -> str:
         self._request_counter += 1
@@ -213,12 +386,43 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
         self._unsubscribe_signal()
         self._button.set_sensitive(True)
         self._set_status(status)
+        if getattr(self, "_present_after_capture", False):
+            if hasattr(self, "present_with_initial_center"):
+                self.present_with_initial_center()
+            else:
+                self.present()
+            self._present_after_capture = False
 
     def _fail(self, reason: str) -> None:
         self._finish(f"Failed: {reason}")
 
     def _show_main_panel(self) -> None:
         self.set_child(self._main_box)
+
+    def _close_preview_window(self) -> None:
+        preview_window = self._preview_window
+        if preview_window is None:
+            return
+        self._closing_preview_programmatically = True
+        try:
+            preview_window.close()
+        finally:
+            self._closing_preview_programmatically = False
+            self._preview_window = None
+
+    def _on_preview_close_request(self, _preview_window: Gtk.Window) -> bool:
+        self._preview_window = None
+        if self._closing_preview_programmatically:
+            return False
+        button_sensitive = (
+            self._button.get_sensitive()
+            if hasattr(self._button, "get_sensitive")
+            else getattr(self._button, "sensitive", True)
+        )
+        if not button_sensitive:
+            self._button.set_sensitive(True)
+            self._set_status("Ready")
+        return False
 
     def _on_change_folder(self, _button: Gtk.Button) -> None:
         dialog = Gtk.FileDialog()
@@ -328,20 +532,40 @@ class MainWindow(Gtk.ApplicationWindow):  # type: ignore[misc]
             on_discard=self._on_editor_discard,
             on_error=self._on_editor_error,
         )
-        self.set_child(editor)
+        self._close_preview_window()
+        preview_window = Gtk.Window(title="Screenshot Preview")
+        app = self.get_application() if hasattr(self, "get_application") else None
+        if app is not None and hasattr(preview_window, "set_application"):
+            preview_window.set_application(app)
+        if hasattr(preview_window, "set_transient_for"):
+            preview_window.set_transient_for(self)
+        preview_window.set_default_size(1024, 700)
+        preview_window.set_child(editor)
+        preview_window.connect("close-request", self._on_preview_close_request)
+        self._preview_window = preview_window
+        preview_window.present()
+        if getattr(self, "_present_after_capture", False):
+            if hasattr(self, "present_with_initial_center"):
+                self.present_with_initial_center()
+            else:
+                self.present()
+            self._present_after_capture = False
 
     def _on_editor_save(self, saved_path: Path) -> None:
         self._show_main_panel()
+        self._close_preview_window()
         self._button.set_sensitive(True)
         self._set_status(self._format_status_saved(saved_path))
 
     def _on_editor_discard(self) -> None:
         self._show_main_panel()
+        self._close_preview_window()
         self._button.set_sensitive(True)
         self._set_status("Ready")
 
     def _on_editor_error(self, message: str) -> None:
         self._show_main_panel()
+        self._close_preview_window()
         self._button.set_sensitive(True)
         self._set_status(f"Failed: {message}")
 

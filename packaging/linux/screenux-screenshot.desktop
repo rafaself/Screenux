@@ -2,6 +2,6 @@
 Type=Application
 Name=Screenux Screenshot
 Exec=screenux-screenshot
-Icon=screenux-screenshot
+Icon=io.github.rafa.ScreenuxScreenshot
 Terminal=false
 Categories=Utility;Graphics;

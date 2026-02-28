@@ -282,6 +282,141 @@ def test_editor_core_methods(monkeypatch):
     assert editor.AnnotationEditor._annotation_moved(self, ann_a, ann_b)
 
 
+def test_create_color_button_uses_color_dialog_when_available(monkeypatch):
+    class DummyRGBAParsed:
+        def __init__(self):
+            self.parsed = None
+
+        def parse(self, text):
+            self.parsed = text
+            return True
+
+    class DummyColorDialog:
+        pass
+
+    class DummyColorDialogButton:
+        def __init__(self, dialog):
+            self.dialog = dialog
+            self.connected = []
+            self.rgba = None
+            self.tooltip = None
+
+        def connect(self, signal, _cb):
+            self.connected.append(signal)
+
+        def set_rgba(self, rgba):
+            self.rgba = rgba
+
+        def set_tooltip_text(self, text):
+            self.tooltip = text
+
+    monkeypatch.setattr(
+        editor,
+        "Gtk",
+        SimpleNamespace(ColorDialog=DummyColorDialog, ColorDialogButton=DummyColorDialogButton),
+    )
+    monkeypatch.setattr(editor, "Gdk", SimpleNamespace(RGBA=DummyRGBAParsed))
+
+    button = editor._create_color_button(lambda *_: None)
+
+    assert isinstance(button, DummyColorDialogButton)
+    assert isinstance(button.dialog, DummyColorDialog)
+    assert button.connected == ["notify::rgba"]
+    assert button.rgba.parsed == "red"
+    assert button.tooltip == "Annotation color"
+
+
+def test_create_color_button_falls_back_when_color_dialog_unavailable(monkeypatch):
+    class DummyRGBAParsed:
+        def __init__(self):
+            self.parsed = None
+
+        def parse(self, text):
+            self.parsed = text
+            return True
+
+    class DummyColorButton:
+        def __init__(self):
+            self.connected = []
+            self.rgba = None
+            self.tooltip = None
+
+        def connect(self, signal, _cb):
+            if signal == "notify::rgba":
+                raise TypeError("unknown signal")
+            self.connected.append(signal)
+
+        def set_rgba(self, rgba):
+            self.rgba = rgba
+
+        def set_tooltip_text(self, text):
+            self.tooltip = text
+
+    monkeypatch.setattr(editor, "Gtk", SimpleNamespace(ColorButton=DummyColorButton))
+    monkeypatch.setattr(editor, "Gdk", SimpleNamespace(RGBA=DummyRGBAParsed))
+
+    button = editor._create_color_button(lambda *_: None)
+
+    assert isinstance(button, DummyColorButton)
+    assert button.connected == ["color-set"]
+    assert button.rgba.parsed == "red"
+    assert button.tooltip == "Annotation color"
+
+
+def test_toolbar_theme_helpers_and_icon_candidates(tmp_path):
+    class Settings:
+        def __init__(self, prefers_dark, theme_name):
+            self.prefers_dark = prefers_dark
+            self.theme_name = theme_name
+
+        def get_property(self, key):
+            if key == "gtk-application-prefer-dark-theme":
+                return self.prefers_dark
+            if key == "gtk-theme-name":
+                return self.theme_name
+            return None
+
+    assert editor._toolbar_icon_variant_from_settings(Settings(False, "Adwaita")) == "light"
+    assert editor._toolbar_icon_variant_from_settings(Settings(False, "Yaru-dark")) == "dark"
+    assert editor._toolbar_icon_variant_from_settings(Settings(True, "Adwaita")) == "dark"
+    assert editor._toolbar_icon_color_from_variant("light") == "#111318"
+    assert editor._toolbar_icon_color_from_variant("dark") == "#F5F7FA"
+
+    candidates = editor._tool_icon_candidates(tmp_path, "tool-select", "dark")
+    assert candidates == [
+        tmp_path / "tool-select-dark.png",
+        tmp_path / "tool-select.png",
+        tmp_path / "tool-select.svg",
+    ]
+
+
+def test_load_tool_icon_prefers_png_then_falls_back_to_svg():
+    image = SimpleNamespace(set_from_icon_name=lambda *_: None)
+
+    calls = []
+    self_png = SimpleNamespace(
+        _icon_dir=Path("/unused"),
+        _toolbar_icon_variant=lambda: "dark",
+        _load_png_icon=lambda _image, path: calls.append(("png", path.name)) or True,
+        _load_svg_icon=lambda _image, path: calls.append(("svg", path.name)) or True,
+    )
+    assert editor.AnnotationEditor._load_tool_icon(self_png, image, "tool-select") is True
+    assert calls == [("png", "tool-select-dark.png")]
+
+    calls.clear()
+    self_svg = SimpleNamespace(
+        _icon_dir=Path("/unused"),
+        _toolbar_icon_variant=lambda: "dark",
+        _load_png_icon=lambda _image, path: calls.append(("png", path.name)) or False,
+        _load_svg_icon=lambda _image, path: calls.append(("svg", path.name)) or True,
+    )
+    assert editor.AnnotationEditor._load_tool_icon(self_svg, image, "tool-select") is True
+    assert calls == [
+        ("png", "tool-select-dark.png"),
+        ("png", "tool-select.png"),
+        ("svg", "tool-select.svg"),
+    ]
+
 def test_editor_draw_drag_click_and_keys(monkeypatch):
     self = FakeEditorSelf()
     self._surface = FakeSurface(100, 100)

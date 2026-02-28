@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+APP_ID = "io.github.rafa.ScreenuxScreenshot"
 
 
 class DebianCiWorkflowTests(unittest.TestCase):
@@ -21,6 +22,7 @@ class DebianCiWorkflowTests(unittest.TestCase):
             "dpkg-deb --contents \"$deb_file\"",
             "dpkg-deb -f \"$deb_file\" Package",
             "sha256sum \"$deb_file\"",
+            f"/usr/share/icons/hicolor/256x256/apps/{APP_ID}.png",
             "find \"$extract_dir\" -type f -perm /6000",
             "find \"$extract_dir\" -type f -perm -0002",
             "help_startup_ms=",

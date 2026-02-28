@@ -9,17 +9,21 @@ Screenux focuses on a clean capture flow: take a screenshot, optionally annotate
 - 🧭 Clean interface with one primary action and clear status messages
 - 🔒 Local-first behavior (no cloud upload flow)
 - 🖼️ Wayland-friendly capture via desktop portal APIs
-- 📁 Practical folder defaults (Desktop, then Home fallback)
+- 📁 Practical folder defaults (`Pictures/Screenshots`, then Home fallback)
 
 ## 🧩 Features
 
 - Capture with `Take Screenshot`
-- Default global hotkey: `Ctrl+Shift+S`
+- Default global hotkey: `Ctrl+Print`
 - Status updates: `Ready`, `Capturing...`, `Saved: <path>`, `Cancelled`, `Failed: <reason>`
 - Built-in editor for quick annotations (shapes/text)
+- Screenshot preview/editor opens in a separate window from the main app controls
+- Editor toolbar tool icons use bundled light/dark PNG assets with theme-aware selection (fallback when SVG loaders are unavailable in some `.deb` runtimes)
+- Editor color picker supports older GTK4 runtimes used by some distro `.deb` installs
 - Editor zoom controls with `Best fit` and quick presets (`33%` to `2000%`)
 - Timestamped output names with safe, non-overwriting writes
 - Packaged app icon for desktop launcher integration
+- Wider default window for comfortable hotkey editing, with centered initial presentation (best-effort by desktop/session)
 
 ## Install
 
@@ -63,7 +67,7 @@ Expected after install:
 
 - CLI available at `/usr/bin/screenux-screenshot`
 - Desktop launcher visible in app menu
-- Icon installed at `/usr/share/icons/hicolor/256x256/apps/screenux-screenshot.png`
+- Icon installed at `/usr/share/icons/hicolor/256x256/apps/io.github.rafa.ScreenuxScreenshot.png` (PNG primary)
 
 Remove later (optional):
 
@@ -77,7 +81,7 @@ sudo apt remove -y screenux-screenshot
 ./install-screenux.sh --bundle /path/to/screenux-screenshot.flatpak
 ```
 
-The installer creates a desktop entry and installs app icons at `~/.local/share/icons/hicolor/scalable/apps/` so launcher/taskbar icon lookup works reliably. It includes theme variants (`io.github.rafa.ScreenuxScreenshot-light.svg` and `io.github.rafa.ScreenuxScreenshot-dark.svg`) and refreshes the local icon cache when GTK cache tools are available.
+The installer creates a desktop entry and installs app icons so launcher/taskbar icon lookup works reliably: PNG primary at `~/.local/share/icons/hicolor/256x256/apps/io.github.rafa.ScreenuxScreenshot.png` plus complementary SVG assets in `~/.local/share/icons/hicolor/scalable/apps/` (including `io.github.rafa.ScreenuxScreenshot-light.svg` and `io.github.rafa.ScreenuxScreenshot-dark.svg`). It refreshes the local icon cache when GTK cache tools are available.
 
 Optional GNOME Print Screen shortcut:
 
@@ -85,7 +89,7 @@ Optional GNOME Print Screen shortcut:
 ./install-screenux.sh --bundle /path/to/screenux-screenshot.flatpak --print-screen
 ```
 
-This maps `Print` to `screenux-screenshot --capture`, which opens Screenux and immediately starts the capture flow.
+This maps `Print` to `screenux-screenshot --capture`, which opens Screenux directly in the final capture/edit stage (without stopping on the main screen first).
 
 If Screenux is already installed for your user, you can rerun:
 
@@ -121,23 +125,27 @@ Preserve app data in `~/.var/app/io.github.rafa.ScreenuxScreenshot`:
 1. Launch the app.
 2. Click `Take Screenshot`.
 3. Confirm or cancel in the system screenshot flow.
-4. (Optional) annotate in the editor.
+4. (Optional) annotate in the separate preview/editor window.
 5. Save and check the status line for the resulting file path.
 
 Save folder behavior:
 
-- Default target is Desktop.
-- If Desktop is unavailable or not writable, Screenux falls back to Home.
+- Default target is `Pictures/Screenshots` (created automatically when possible).
+- If `Pictures/Screenshots` is unavailable or not writable, Screenux falls back to Home.
 - You can change the destination from the app (`Save to` → `Change…`).
 
 Global hotkey behavior:
 
-- Default shortcut is `Ctrl+Shift+S`.
-- If it is already taken, Screenux falls back to `Ctrl+Alt+S` (then `Alt+Shift+S`, then `Super+Shift+S`).
+- Default shortcut is `Ctrl+Print`.
+- On GNOME/Linux, when your selected shortcut matches a native screenshot binding (including clipboard variants like `Ctrl+Print`), Screenux first tries to disable that native binding so your shortcut can be used directly.
+- If the shortcut is still unavailable, Screenux falls back to `Ctrl+Shift+S` (then `Ctrl+Alt+S`, then `Alt+Shift+S`, then `Super+Shift+S`).
 - On GNOME, the shortcut is persisted as a GNOME custom shortcut and works when the app is closed.
 - On non-GNOME desktops, global shortcut support is best-effort while the app is running.
 - Shortcut config is stored at `~/.config/screenux/settings.json` as `global_hotkey` (`null` disables it).
-- You can change or disable the shortcut from the app window (`Apply` / `Disable`).
+- While the shortcut field is focused, press the key combo and Screenux builds it automatically (example: `Ctrl + S`).
+- You can apply with `Enter` or `Apply`.
+- You can return to default with `Default`, or clear/disable with `Clear` (on GNOME this also restores native Print screenshot bindings).
+- Set `SCREENUX_LOG_LEVEL=INFO` to emit hotkey telemetry to stderr (registration resolution and `--capture` detection/handling) when debugging shortcut issues.
 
 ## 🖼️ UI example
 

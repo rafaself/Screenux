@@ -24,6 +24,32 @@ class DummyButton:
     def set_sensitive(self, value):
         self.sensitive = value
 
+    def get_sensitive(self):
+        return self.sensitive
+
+
+class DummyEntry:
+    def __init__(self, text=""):
+        self.text = text
+
+    def get_text(self):
+        return self.text
+
+    def set_text(self, text):
+        self.text = text
+
+    def set_position(self, _position):
+        return None
+
+
+class DummyHotkeyManager:
+    def __init__(self):
+        self.last_applied = None
+
+    def apply_shortcut(self, value):
+        self.last_applied = value
+        return SimpleNamespace(shortcut=value, warning=None)
+
 
 class DummyBus:
     def __init__(self, unique_name=":1.23"):
@@ -54,11 +80,52 @@ class DummyVariant:
         return self.value
 
 
+class DummyPreviewWindow:
+    def __init__(self, title=None):
+        self.title = title
+        self.application = None
+        self.transient_for = None
+        self.default_size = None
+        self.child = None
+        self.present_calls = 0
+        self.close_calls = 0
+        self._close_request_handler = None
+
+    def set_application(self, app):
+        self.application = app
+
+    def set_transient_for(self, parent):
+        self.transient_for = parent
+
+    def set_default_size(self, width, height):
+        self.default_size = (width, height)
+
+    def set_child(self, child):
+        self.child = child
+
+    def connect(self, signal, callback):
+        if signal == "close-request":
+            self._close_request_handler = callback
+        return 1
+
+    def present(self):
+        self.present_calls += 1
+
+    def close(self):
+        self.close_calls += 1
+        if self._close_request_handler is not None:
+            self._close_request_handler(self)
+
+
 class FakeWindowSelf:
     def __init__(self):
         self._request_counter = 0
         self._bus = None
         self._signal_sub_id = None
+        self._preview_window = None
+        self._closing_preview_programmatically = False
+        self._present_after_capture = False
+        self._present_calls = 0
         self._button = DummyButton()
         self._status_label = DummyLabel()
         self._main_box = object()
@@ -73,6 +140,8 @@ class FakeWindowSelf:
         self._finish = lambda status: window.MainWindow._finish(self, status)
         self._fail = lambda reason: window.MainWindow._fail(self, reason)
         self._show_main_panel = lambda: window.MainWindow._show_main_panel(self)
+        self._close_preview_window = lambda: window.MainWindow._close_preview_window(self)
+        self._on_preview_close_request = lambda preview_window: window.MainWindow._on_preview_close_request(self, preview_window)
         self._build_handle_token = lambda: window.MainWindow._build_handle_token(self)
         self._on_portal_response = (
             lambda connection, sender_name, object_path, interface_name, signal_name, parameters: window.MainWindow._on_portal_response(
@@ -92,6 +161,12 @@ class FakeWindowSelf:
     def set_child(self, child):
         self._set_child_value = child
 
+    def present(self):
+        self._present_calls += 1
+
+    def get_application(self):
+        return "app"
+
 
 def test_window_take_screenshot_public_method():
     self = FakeWindowSelf()
@@ -101,6 +176,193 @@ def test_window_take_screenshot_public_method():
     window.MainWindow.take_screenshot(self)
 
     assert called == [self._button]
+
+
+def test_window_trigger_shortcut_capture_sets_deferred_presentation_flag():
+    self = FakeWindowSelf()
+    calls = []
+    self.take_screenshot = lambda: calls.append("capture")
+
+    window.MainWindow.trigger_shortcut_capture(self)
+
+    assert calls == ["capture"]
+    assert self._present_after_capture is True
+
+
+def test_window_finish_presents_when_shortcut_capture_is_deferred():
+    self = FakeWindowSelf()
+    self._present_after_capture = True
+
+    window.MainWindow._finish(self, "Done")
+
+    assert self._present_calls == 1
+    assert self._present_after_capture is False
+
+
+def test_window_hotkey_apply_accepts_printscreen_alias():
+    manager = DummyHotkeyManager()
+    self = SimpleNamespace(
+        _hotkey_manager=manager,
+        _hotkey_entry=DummyEntry("ctrl+print screen"),
+        _set_status=lambda text: setattr(self, "_status_text", text),
+        _apply_hotkey_result=lambda result: setattr(self, "_applied_result", result),
+    )
+    self._status_text = ""
+    self._applied_result = None
+
+    window.MainWindow._on_hotkey_apply(self, None)
+
+    assert manager.last_applied == "ctrl+print screen"
+    assert self._applied_result is not None
+    assert self._applied_result.shortcut == "ctrl+print screen"
+
+
+def test_window_hotkey_apply_rejects_empty_and_mentions_clear():
+    manager = DummyHotkeyManager()
+    self = SimpleNamespace(
+        _hotkey_manager=manager,
+        _hotkey_entry=DummyEntry(""),
+        _set_status=lambda text: setattr(self, "_status_text", text),
+        _apply_hotkey_result=lambda result: setattr(self, "_applied_result", result),
+    )
+    self._status_text = ""
+    self._applied_result = None
+
+    window.MainWindow._on_hotkey_apply(self, None)
+
+    assert "use Clear" in self._status_text
+    assert self._applied_result is None
+
+
+def test_window_hotkey_restore_default():
+    manager = DummyHotkeyManager()
+    self = SimpleNamespace(
+        _hotkey_manager=manager,
+        _apply_hotkey_result=lambda result: setattr(self, "_applied_result", result),
+    )
+    self._applied_result = None
+
+    window.MainWindow._on_hotkey_restore_default(self, None)
+
+    assert manager.last_applied == "Ctrl+Print"
+    assert self._applied_result is not None
+    assert self._applied_result.shortcut == "Ctrl+Print"
+
+
+def test_window_hotkey_entry_activate_triggers_apply():
+    calls = []
+    self = SimpleNamespace(
+        _on_hotkey_apply=lambda button: calls.append(button),
+    )
+
+    window.MainWindow._on_hotkey_entry_activate(self, "entry")
+
+    assert calls == ["entry"]
+
+
+def test_window_hotkey_capture_builds_shortcut_from_key_event(monkeypatch):
+    fake_gdk = SimpleNamespace(
+        ModifierType=SimpleNamespace(
+            CONTROL_MASK=1,
+            ALT_MASK=2,
+            SHIFT_MASK=4,
+            SUPER_MASK=8,
+        ),
+        KEY_Control_L=1000,
+        KEY_Control_R=1001,
+        KEY_Shift_L=1002,
+        KEY_Shift_R=1003,
+        KEY_Alt_L=1004,
+        KEY_Alt_R=1005,
+        KEY_Super_L=1006,
+        KEY_Super_R=1007,
+        KEY_Meta_L=1008,
+        KEY_Meta_R=1009,
+        KEY_ISO_Left_Tab=1010,
+        KEY_Return=1011,
+        KEY_KP_Enter=1012,
+        keyval_name=lambda keyval: {115: "s", 1111: "Print", 1112: "F5"}.get(keyval),
+    )
+    monkeypatch.setattr(window, "Gdk", fake_gdk)
+
+    self = SimpleNamespace(
+        _hotkey_entry=DummyEntry(""),
+        _set_status=lambda text: setattr(self, "_status_text", text),
+    )
+    self._status_text = ""
+
+    consumed = window.MainWindow._on_hotkey_entry_key_pressed(
+        self,
+        None,
+        115,
+        0,
+        fake_gdk.ModifierType.CONTROL_MASK | fake_gdk.ModifierType.SHIFT_MASK,
+    )
+    assert consumed is True
+    assert self._hotkey_entry.text == "Ctrl + Shift + S"
+
+    consumed_modifier = window.MainWindow._on_hotkey_entry_key_pressed(
+        self,
+        None,
+        fake_gdk.KEY_Control_L,
+        0,
+        fake_gdk.ModifierType.CONTROL_MASK,
+    )
+    assert consumed_modifier is True
+    assert self._hotkey_entry.text == "Ctrl + Shift + S"
+
+    consumed_print = window.MainWindow._on_hotkey_entry_key_pressed(
+        self,
+        None,
+        1111,
+        0,
+        0,
+    )
+    assert consumed_print is True
+    assert self._hotkey_entry.text == "Print"
+
+
+def test_window_hotkey_capture_ignores_unmapped_key(monkeypatch):
+    fake_gdk = SimpleNamespace(
+        ModifierType=SimpleNamespace(
+            CONTROL_MASK=1,
+            ALT_MASK=2,
+            SHIFT_MASK=4,
+            SUPER_MASK=8,
+        ),
+        KEY_Control_L=1000,
+        KEY_Control_R=1001,
+        KEY_Shift_L=1002,
+        KEY_Shift_R=1003,
+        KEY_Alt_L=1004,
+        KEY_Alt_R=1005,
+        KEY_Super_L=1006,
+        KEY_Super_R=1007,
+        KEY_Meta_L=1008,
+        KEY_Meta_R=1009,
+        KEY_ISO_Left_Tab=1010,
+        KEY_Return=1011,
+        KEY_KP_Enter=1012,
+        keyval_name=lambda _keyval: None,
+    )
+    monkeypatch.setattr(window, "Gdk", fake_gdk)
+
+    self = SimpleNamespace(
+        _hotkey_entry=DummyEntry("Ctrl + S"),
+        _set_status=lambda text: setattr(self, "_status_text", text),
+    )
+    self._status_text = ""
+
+    consumed = window.MainWindow._on_hotkey_entry_key_pressed(
+        self,
+        None,
+        61,
+        0,
+        0,
+    )
+    assert consumed is True
+    assert self._hotkey_entry.text == "Ctrl + S"
+    assert self._status_text == ""
 
 
 class DummyError(Exception):
@@ -117,6 +379,23 @@ def test_window_top_level_helpers():
     wrapped = SimpleNamespace(unpack=lambda: "file:///tmp/x.png")
     assert window._extract_uri({"uri": wrapped}) == "file:///tmp/x.png"
     assert window._extract_uri({"uri": "file:///tmp/y.png"}) == "file:///tmp/y.png"
+
+
+def test_window_initial_size_and_center_helpers():
+    width, height = window._initial_window_size()
+    assert width >= 480
+    assert height >= 180
+
+    x, y = window._center_position(
+        monitor_x=100,
+        monitor_y=50,
+        monitor_width=1920,
+        monitor_height=1080,
+        window_width=width,
+        window_height=height,
+    )
+    assert x == 100 + (1920 - width) // 2
+    assert y == 50 + (1080 - height) // 2
 
 
 def test_window_uri_to_local_path(tmp_path):
@@ -164,16 +443,22 @@ def test_window_show_panel_and_editor_callbacks():
     window.MainWindow._show_main_panel(self)
     assert self._set_child_value is self._main_box
 
+    self._preview_window = DummyPreviewWindow()
     window.MainWindow._on_editor_save(self, Path("/tmp/a.png"))
     assert self._set_child_value is self._main_box
+    assert self._preview_window is None
     assert self._button.sensitive is True
     assert self._status_label.text == "Saved: /tmp/a.png"
 
+    self._preview_window = DummyPreviewWindow()
     window.MainWindow._on_editor_discard(self)
+    assert self._preview_window is None
     assert self._status_label.text == "Ready"
 
+    self._preview_window = DummyPreviewWindow()
     window.MainWindow._on_editor_error(self, "save broke")
     assert self._set_child_value is self._main_box
+    assert self._preview_window is None
     assert self._button.sensitive is True
     assert self._status_label.text == "Failed: save broke"
 
@@ -253,6 +538,8 @@ def test_window_save_uri_success_and_failure(monkeypatch):
     self = FakeWindowSelf()
     self._bus = DummyBus()
     self._signal_sub_id = 3
+    fake_gtk = SimpleNamespace(Window=DummyPreviewWindow)
+    monkeypatch.setattr(window, "Gtk", fake_gtk)
 
     marker = object()
     monkeypatch.setattr(window, "_uri_to_local_path", lambda _uri: Path("/tmp/test x.png"))
@@ -264,7 +551,10 @@ def test_window_save_uri_success_and_failure(monkeypatch):
     )
 
     window.MainWindow._save_uri(self, "file:///tmp/test%20x.png")
-    assert isinstance(self._set_child_value, dict)
+    assert self._set_child_value is None
+    assert isinstance(self._preview_window, DummyPreviewWindow)
+    assert isinstance(self._preview_window.child, dict)
+    assert self._preview_window.present_calls == 1
     assert self._bus.unsubscribe_calls == [3]
 
     self._signal_sub_id = None
@@ -275,6 +565,20 @@ def test_window_save_uri_success_and_failure(monkeypatch):
     monkeypatch.setattr(window, "load_image_surface", broken)
     window.MainWindow._save_uri(self, "file:///tmp/xx.png")
     assert self._status_label.text.startswith("Failed: could not load image")
+
+
+def test_window_preview_close_request_restores_main_ready_state():
+    self = FakeWindowSelf()
+    self._preview_window = DummyPreviewWindow()
+    self._button.set_sensitive(False)
+    self._status_label.set_text("Capturing...")
+
+    keep_open = window.MainWindow._on_preview_close_request(self, self._preview_window)
+
+    assert keep_open is False
+    assert self._preview_window is None
+    assert self._button.sensitive is True
+    assert self._status_label.text == "Ready"
 
 
 def test_window_save_uri_rejects_invalid_source(monkeypatch):
@@ -458,6 +762,71 @@ def test_screenshot_app_command_line_can_request_capture_on_existing_instance():
     assert result == 0
     assert app._auto_capture_pending is True
     assert app.activated is True
+
+
+def test_screenshot_app_command_line_emits_capture_detection_log(caplog):
+    if not hasattr(screenshot.ScreenuxScreenshotApp, "do_command_line"):
+        return
+
+    app = SimpleNamespace(_auto_capture_pending=False, activate=lambda: None)
+
+    class FakeCommandLine:
+        @staticmethod
+        def get_arguments():
+            return ["screenux-screenshot", "--capture"]
+
+    with caplog.at_level("INFO", logger="screenux.app"):
+        screenshot.ScreenuxScreenshotApp.do_command_line(app, FakeCommandLine())
+
+    assert "hotkey.event.detected source=command-line" in caplog.text
+    assert "--capture" in caplog.text
+
+
+def test_screenshot_app_do_activate_auto_capture_skips_initial_present(monkeypatch):
+    if not hasattr(screenshot.ScreenuxScreenshotApp, "do_activate"):
+        return
+
+    created = {}
+
+    class FakeWindow:
+        def __init__(self, *_args, **_kwargs):
+            self.present_calls = 0
+            self.capture_calls = 0
+            created["window"] = self
+
+        def present(self):
+            self.present_calls += 1
+
+        def set_icon_name(self, _name):
+            return None
+
+        def set_nonblocking_warning(self, _text):
+            return None
+
+        def trigger_shortcut_capture(self):
+            self.capture_calls += 1
+
+    class FakeGtkWindow:
+        @staticmethod
+        def set_default_icon_name(_name):
+            return None
+
+    monkeypatch.setattr(screenshot, "MainWindow", FakeWindow)
+    monkeypatch.setattr(screenshot, "Gtk", SimpleNamespace(Window=FakeGtkWindow))
+
+    app = SimpleNamespace(
+        _auto_capture_pending=True,
+        _hotkey_manager=SimpleNamespace(
+            ensure_registered=lambda: SimpleNamespace(warning=None)
+        ),
+        props=SimpleNamespace(active_window=None),
+    )
+
+    screenshot.ScreenuxScreenshotApp.do_activate(app)
+
+    assert app._auto_capture_pending is False
+    assert created["window"].capture_calls == 1
+    assert created["window"].present_calls == 0
 
 
 def test_screenshot_enforce_offline_mode_blocks_network(monkeypatch):

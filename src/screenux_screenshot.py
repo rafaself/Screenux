@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import socket
 import sys
@@ -27,11 +28,11 @@ except Exception as exc:  # pragma: no cover - handled at runtime
     Gtk = None  # type: ignore[assignment]  # pragma: no cover
 
 APP_ID = "io.github.rafa.ScreenuxScreenshot"
-LIGHT_ICON_NAME = f"{APP_ID}-light"
-DARK_ICON_NAME = f"{APP_ID}-dark"
 _MAX_CONFIG_SIZE = 64 * 1024
 _ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"}
-APP_VERSION = "0.1.0"
+APP_VERSION = "1.0.0"
+_LOG_LEVEL_ENV = "SCREENUX_LOG_LEVEL"
+LOGGER = logging.getLogger("screenux.app")
 
 
 def _print_help() -> None:
@@ -49,20 +50,8 @@ def _print_help() -> None:
     )
 
 
-def _prefers_dark_theme() -> bool:
-    if Gtk is None:
-        return False
-    settings = Gtk.Settings.get_default()
-    if settings is None:
-        return False
-    try:
-        return bool(settings.get_property("gtk-application-prefer-dark-theme"))
-    except Exception:
-        return False
-
-
 def select_icon_name() -> str:
-    return DARK_ICON_NAME if _prefers_dark_theme() else LIGHT_ICON_NAME
+    return APP_ID
 
 
 def enforce_offline_mode() -> None:
@@ -148,14 +137,22 @@ def resolve_save_dir() -> Path:
         if custom_path.is_dir() and os.access(custom_path, os.W_OK | os.X_OK):
             return custom_path
 
-    desktop_dir: str | None = None
+    pictures_dir: str | None = None
     if GLib is not None:
-        desktop_dir = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DESKTOP)
+        try:
+            pictures_dir = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_PICTURES)
+        except Exception:
+            pictures_dir = None
 
-    if desktop_dir:
-        desktop_path = Path(desktop_dir).expanduser()
-        if desktop_path.is_dir() and os.access(desktop_path, os.W_OK | os.X_OK):
-            return desktop_path
+    base_dir = Path(pictures_dir).expanduser() if pictures_dir else (Path.home() / "Pictures")
+    screenshots_dir = base_dir / "Screenshots"
+    try:
+        screenshots_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    else:
+        if screenshots_dir.is_dir() and os.access(screenshots_dir, os.W_OK | os.X_OK):
+            return screenshots_dir
 
     return Path.home()
 
@@ -176,6 +173,20 @@ def build_output_path(source_uri: str) -> Path:
 
 def format_status_saved(path: Path) -> str:
     return f"Saved: {path}"
+
+
+def configure_logging() -> None:
+    level_name = os.environ.get(_LOG_LEVEL_ENV, "").strip().upper()
+    if not level_name:
+        return
+
+    level = getattr(logging, level_name, None)
+    if not isinstance(level, int):
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+        LOGGER.warning("Invalid %s value: %s", _LOG_LEVEL_ENV, level_name)
+        return
+
+    logging.basicConfig(level=level, format="%(levelname)s %(name)s %(message)s")
 
 
 def _parse_cli_args(argv: list[str]) -> tuple[list[str], bool]:
@@ -216,6 +227,7 @@ if Gtk is not None:
             _, auto_capture = _parse_cli_args(args)
             if auto_capture:
                 self._auto_capture_pending = True
+                LOGGER.info("hotkey.event.detected source=command-line args=%s", args)
             self.activate()
             return 0
 
@@ -223,6 +235,13 @@ if Gtk is not None:
             icon_name = select_icon_name()
             Gtk.Window.set_default_icon_name(icon_name)
             hotkey_result = self._hotkey_manager.ensure_registered()
+            LOGGER.info(
+                "hotkey.registration.result shortcut=%r warning=%r",
+                getattr(hotkey_result, "shortcut", None),
+                getattr(hotkey_result, "warning", None),
+            )
+            auto_capture = self._auto_capture_pending
+            self._auto_capture_pending = False
             window = self.props.active_window
             if window is None:
                 window = MainWindow(
@@ -240,9 +259,16 @@ if Gtk is not None:
                 window.set_icon_name(icon_name)
                 if hotkey_result.warning and hasattr(window, "set_nonblocking_warning"):
                     window.set_nonblocking_warning(hotkey_result.warning)
-            window.present()
-            if self._auto_capture_pending:
-                self._auto_capture_pending = False
+            if auto_capture and hasattr(window, "trigger_shortcut_capture"):
+                LOGGER.info("hotkey.event.handled source=activation mode=shortcut-trigger")
+                window.trigger_shortcut_capture()
+                return
+            if hasattr(window, "present_with_initial_center"):
+                window.present_with_initial_center()
+            else:
+                window.present()
+            if auto_capture:
+                LOGGER.info("hotkey.event.handled source=activation mode=idle-capture")
                 GLib.idle_add(self._trigger_auto_capture, window)
 else:
     class ScreenuxScreenshotApp:  # pragma: no cover
@@ -251,6 +277,7 @@ else:
 
 
 def main(argv: list[str]) -> int:
+    configure_logging()
     if "--help" in argv or "-h" in argv:
         _print_help()
         return 0
@@ -263,6 +290,8 @@ def main(argv: list[str]) -> int:
         print(f"Missing GTK4/PyGObject dependencies: {GI_IMPORT_ERROR}", file=sys.stderr)
         return 1
     _, auto_capture = _parse_cli_args(argv)
+    if auto_capture:
+        LOGGER.info("hotkey.event.detected source=main argv=%s", argv)
     app = ScreenuxScreenshotApp(auto_capture=auto_capture)
     return app.run(argv)
 

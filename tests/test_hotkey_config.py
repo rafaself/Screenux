@@ -13,9 +13,9 @@ def test_read_hotkey_uses_default_when_unset():
 
 def test_write_and_read_hotkey_round_trip():
     config = {}
-    hotkey.write_hotkey_to_config(config, "ctrl+shift+s")
-    assert config["global_hotkey"] == "Ctrl+Shift+S"
-    assert hotkey.read_hotkey_from_config(config) == "Ctrl+Shift+S"
+    hotkey.write_hotkey_to_config(config, "ctrl+print screen")
+    assert config["global_hotkey"] == "Ctrl+Print"
+    assert hotkey.read_hotkey_from_config(config) == "Ctrl+Print"
 
 
 def test_write_and_read_disabled_hotkey():
@@ -44,3 +44,10 @@ def test_hotkey_manager_persists_default_value_when_missing_from_config():
 
     assert result.shortcut == hotkey.DEFAULT_SHORTCUT
     assert state["global_hotkey"] == hotkey.DEFAULT_SHORTCUT
+
+
+def test_normalize_shortcut_accepts_printscreen_aliases_with_modifier_combo():
+    assert hotkey.normalize_shortcut("ctrl+printscreen") == "Ctrl+Print"
+    assert hotkey.normalize_shortcut("CTRL+PrtScn") == "Ctrl+Print"
+    assert hotkey.normalize_shortcut("Ctrl+Sys_Req") == "Ctrl+Print"
+    assert hotkey.normalize_shortcut("Shift+Print Screen") == "Shift+Print"

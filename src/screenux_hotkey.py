@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
+import shlex
+import shutil
 import subprocess  # nosec B404 - required for trusted local command invocation.
+import sys
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Callable
 
-DEFAULT_SHORTCUT = "Ctrl+Shift+S"
-FALLBACK_SHORTCUTS = ("Ctrl+Alt+S", "Alt+Shift+S", "Super+Shift+S")
+DEFAULT_SHORTCUT = "Ctrl+Print"
+FALLBACK_SHORTCUTS = ("Ctrl+Shift+S", "Ctrl+Alt+S", "Alt+Shift+S", "Super+Shift+S")
 HOTKEY_CONFIG_KEY = "global_hotkey"
 
 GNOME_MEDIA_SCHEMA = "org.gnome.settings-daemon.plugins.media-keys"
@@ -21,6 +25,7 @@ SCREENUX_SHORTCUT_NAME = "Screenux Screenshot"
 SCREENUX_CAPTURE_COMMAND = "screenux-screenshot --capture"
 
 Runner = Callable[[list[str]], object]
+LOGGER = logging.getLogger("screenux.hotkey")
 
 _MODIFIER_ORDER = ("Ctrl", "Alt", "Shift", "Super")
 _MODIFIER_ALIASES = {
@@ -42,10 +47,28 @@ _GSETTINGS_MODIFIER = {
 _NATIVE_SHORTCUT_KEYS = (
     (GNOME_SHELL_SCHEMA, "show-screenshot"),
     (GNOME_SHELL_SCHEMA, "show-screenshot-ui"),
+    (GNOME_SHELL_SCHEMA, "screenshot"),
+    (GNOME_SHELL_SCHEMA, "screenshot-window"),
     (GNOME_SHELL_SCHEMA, "show-screen-recording-ui"),
     (GNOME_MEDIA_SCHEMA, "screenshot"),
     (GNOME_MEDIA_SCHEMA, "window-screenshot"),
     (GNOME_MEDIA_SCHEMA, "area-screenshot"),
+    (GNOME_MEDIA_SCHEMA, "screenshot-clip"),
+    (GNOME_MEDIA_SCHEMA, "window-screenshot-clip"),
+    (GNOME_MEDIA_SCHEMA, "area-screenshot-clip"),
+)
+
+_NATIVE_PRINT_RESET_KEYS = (
+    (GNOME_SHELL_SCHEMA, "show-screenshot"),
+    (GNOME_SHELL_SCHEMA, "show-screenshot-ui"),
+    (GNOME_SHELL_SCHEMA, "screenshot"),
+    (GNOME_SHELL_SCHEMA, "screenshot-window"),
+    (GNOME_MEDIA_SCHEMA, "screenshot"),
+    (GNOME_MEDIA_SCHEMA, "window-screenshot"),
+    (GNOME_MEDIA_SCHEMA, "area-screenshot"),
+    (GNOME_MEDIA_SCHEMA, "screenshot-clip"),
+    (GNOME_MEDIA_SCHEMA, "window-screenshot-clip"),
+    (GNOME_MEDIA_SCHEMA, "area-screenshot-clip"),
 )
 
 
@@ -74,6 +97,47 @@ def _success(result: object) -> bool:
     return int(getattr(result, "returncode", 1)) == 0
 
 
+def _log_telemetry(event: str, **fields: object) -> None:
+    details = ", ".join(f"{key}={fields[key]!r}" for key in sorted(fields))
+    if details:
+        LOGGER.info("hotkey.%s %s", event, details)
+        return
+    LOGGER.info("hotkey.%s", event)
+
+
+def _resolve_capture_command() -> str:
+    configured = os.environ.get("SCREENUX_CAPTURE_COMMAND", "").strip()
+    if configured:
+        return configured
+
+    executable = shutil.which("screenux-screenshot")
+    if executable:
+        return f"{shlex.quote(executable)} --capture"
+
+    argv0 = (sys.argv[0] or "").strip()
+    if argv0:
+        resolved = argv0 if os.path.isabs(argv0) else (shutil.which(argv0) or argv0)
+        if os.path.basename(resolved) == "screenux-screenshot":
+            return f"{shlex.quote(resolved)} --capture"
+
+    return SCREENUX_CAPTURE_COMMAND
+
+
+def _is_screenux_capture_command(command: str) -> bool:
+    text = command.strip()
+    if not text:
+        return False
+    if text == SCREENUX_CAPTURE_COMMAND:
+        return True
+    try:
+        parts = shlex.split(text)
+    except ValueError:
+        return False
+    if len(parts) < 2 or parts[-1] != "--capture":
+        return False
+    return any(os.path.basename(part) == "screenux-screenshot" for part in parts[:-1])
+
+
 def _normalize_key_token(token: str) -> str:
     text = token.strip()
     if not text:
@@ -83,6 +147,9 @@ def _normalize_key_token(token: str) -> str:
 
     upper = text.upper()
     if upper == "PRINT":
+        return "Print"
+    compact = re.sub(r"[\s_-]+", "", upper)
+    if compact in {"PRINTSCREEN", "PRTSC", "PRTSCN", "SYSREQ"}:
         return "Print"
     if upper.startswith("F") and upper[1:].isdigit():
         return upper
@@ -217,7 +284,7 @@ def shortcut_to_gsettings_binding(shortcut: str) -> str:
     modifiers = parts[:-1]
     modifier_prefix = "".join(_GSETTINGS_MODIFIER[item] for item in modifiers)
     key_token = key.lower() if len(key) == 1 else key
-    return f"['{modifier_prefix}{key_token}']"
+    return f"{modifier_prefix}{key_token}"
 
 
 def _schema_exists(schema: str, runner: Runner) -> bool:
@@ -239,6 +306,11 @@ def _gsettings_set(schema: str, key: str, value: str, runner: Runner) -> bool:
     return _success(result)
 
 
+def _gsettings_reset(schema: str, key: str, runner: Runner) -> bool:
+    result = _run(["gsettings", "reset", schema, key], runner)
+    return _success(result)
+
+
 def _gsettings_available(runner: Runner) -> bool:
     result = _run(["gsettings", "--version"], runner)
     return _success(result)
@@ -246,6 +318,13 @@ def _gsettings_available(runner: Runner) -> bool:
 
 def _build_gsettings_list(paths: list[str]) -> str:
     return "[" + ", ".join(f"'{path}'" for path in paths) + "]"
+
+
+def _key_exists(schema: str, key: str, runner: Runner) -> bool:
+    result = _run(["gsettings", "list-keys", schema], runner)
+    if not _success(result):
+        return False
+    return key in _stdout(result).splitlines()
 
 
 def _custom_paths(runner: Runner) -> list[str]:
@@ -269,15 +348,17 @@ def _find_screenux_custom_path(paths: list[str], runner: Runner) -> str | None:
         schema = f"{GNOME_CUSTOM_SCHEMA}:{path}"
         current_name = _strip_single_quotes(_gsettings_get(schema, "name", runner))
         current_command = _strip_single_quotes(_gsettings_get(schema, "command", runner))
-        if current_name == SCREENUX_SHORTCUT_NAME or current_command == SCREENUX_CAPTURE_COMMAND:
+        if current_name == SCREENUX_SHORTCUT_NAME or _is_screenux_capture_command(current_command):
             return path
     return None
 
 
 def collect_gnome_taken_shortcuts(runner: Runner = _default_runner, exclude_path: str | None = None) -> set[str]:
     if not _gsettings_available(runner):
+        _log_telemetry("collect.skip", reason="gsettings-unavailable")
         return set()
     if not _schema_exists(GNOME_MEDIA_SCHEMA, runner):
+        _log_telemetry("collect.skip", reason="media-schema-unavailable")
         return set()
 
     taken: set[str] = set()
@@ -297,7 +378,31 @@ def collect_gnome_taken_shortcuts(runner: Runner = _default_runner, exclude_path
         if parsed:
             taken.add(parsed)
 
+    _log_telemetry("collect.complete", total=len(taken), taken=sorted(taken))
     return taken
+
+
+def _native_shortcut_conflicts(shortcut: str, runner: Runner) -> list[tuple[str, str]]:
+    conflicts: list[tuple[str, str]] = []
+    for schema, key in _NATIVE_SHORTCUT_KEYS:
+        if not _schema_exists(schema, runner):
+            continue
+        parsed = parse_gsettings_binding(_gsettings_get(schema, key, runner) or "")
+        if parsed == shortcut:
+            conflicts.append((schema, key))
+    return conflicts
+
+
+def _clear_native_shortcut_conflicts(conflicts: list[tuple[str, str]], runner: Runner) -> tuple[list[str], list[str]]:
+    cleared: list[str] = []
+    failed: list[str] = []
+    for schema, key in conflicts:
+        target = f"{schema}:{key}"
+        if _gsettings_set(schema, key, "[]", runner):
+            cleared.append(target)
+        else:
+            failed.append(target)
+    return cleared, failed
 
 
 def _remove_screenux_shortcut(paths: list[str], runner: Runner) -> None:
@@ -306,6 +411,27 @@ def _remove_screenux_shortcut(paths: list[str], runner: Runner) -> None:
         return
     updated_paths = [path for path in paths if path != screenux_path]
     _gsettings_set(GNOME_MEDIA_SCHEMA, GNOME_CUSTOM_KEY, _build_gsettings_list(updated_paths), runner)
+
+
+def _remove_screenux_shortcut_entry(paths: list[str], runner: Runner) -> bool:
+    screenux_path = _find_screenux_custom_path(paths, runner)
+    if screenux_path is None:
+        return False
+    updated_paths = [path for path in paths if path != screenux_path]
+    _gsettings_set(GNOME_MEDIA_SCHEMA, GNOME_CUSTOM_KEY, _build_gsettings_list(updated_paths), runner)
+    return True
+
+
+def _restore_native_print_bindings(runner: Runner) -> list[str]:
+    restored: list[str] = []
+    for schema, key in _NATIVE_PRINT_RESET_KEYS:
+        if not _schema_exists(schema, runner):
+            continue
+        if not _key_exists(schema, key, runner):
+            continue
+        if _gsettings_reset(schema, key, runner):
+            restored.append(f"{schema}:{key}")
+    return restored
 
 
 def _next_available_custom_path(paths: list[str]) -> str:
@@ -322,24 +448,54 @@ def register_gnome_shortcut(
     shortcut: str | None,
     runner: Runner = _default_runner,
 ) -> HotkeyRegistrationResult:
+    _log_telemetry("register.start", requested=shortcut)
     if not _gsettings_available(runner):
+        LOGGER.warning("hotkey.register.failed reason=gsettings-unavailable")
         return HotkeyRegistrationResult(shortcut, "gsettings is unavailable; global hotkey not configured.")
     if not _schema_exists(GNOME_MEDIA_SCHEMA, runner):
+        LOGGER.warning("hotkey.register.failed reason=media-schema-unavailable")
         return HotkeyRegistrationResult(shortcut, "GNOME media key schema not available; global hotkey not configured.")
 
     paths = _custom_paths(runner)
     screenux_path = _find_screenux_custom_path(paths, runner)
 
     if shortcut is None:
-        _remove_screenux_shortcut(paths, runner)
+        removed = _remove_screenux_shortcut_entry(paths, runner)
+        restored_native = _restore_native_print_bindings(runner) if removed else []
+        _log_telemetry("register.restore-native", restored=restored_native)
+        _log_telemetry("register.disabled")
         return HotkeyRegistrationResult(None, None)
 
     preferred = normalize_shortcut(shortcut)
     taken = collect_gnome_taken_shortcuts(runner=runner, exclude_path=screenux_path)
     resolved, warning = resolve_shortcut_with_fallback(preferred, lambda candidate: candidate in taken)
+    if resolved != preferred:
+        conflicts = _native_shortcut_conflicts(preferred, runner)
+        if conflicts:
+            cleared, failed = _clear_native_shortcut_conflicts(conflicts, runner)
+            _log_telemetry(
+                "register.reclaim",
+                preferred=preferred,
+                conflicts=[f"{schema}:{key}" for schema, key in conflicts],
+                cleared=cleared,
+                failed=failed,
+            )
+            if cleared:
+                refreshed_taken = collect_gnome_taken_shortcuts(runner=runner, exclude_path=screenux_path)
+                if preferred not in refreshed_taken:
+                    resolved = preferred
+                    if failed:
+                        warning = (
+                            f"Reclaimed {preferred} by disabling native binding(s): "
+                            f"{', '.join(cleared)}. Some bindings could not be changed: {', '.join(failed)}."
+                        )
+                    else:
+                        warning = None
+    _log_telemetry("register.resolve", preferred=preferred, resolved=resolved, warning=warning)
 
     if resolved is None:
         _remove_screenux_shortcut(paths, runner)
+        LOGGER.warning("hotkey.register.failed reason=no-available-shortcut preferred=%r", preferred)
         return HotkeyRegistrationResult(None, warning)
 
     target_path = screenux_path or _next_available_custom_path(paths)
@@ -348,9 +504,21 @@ def register_gnome_shortcut(
         _gsettings_set(GNOME_MEDIA_SCHEMA, GNOME_CUSTOM_KEY, _build_gsettings_list(paths), runner)
 
     target_schema = f"{GNOME_CUSTOM_SCHEMA}:{target_path}"
-    _gsettings_set(target_schema, "name", SCREENUX_SHORTCUT_NAME, runner)
-    _gsettings_set(target_schema, "command", SCREENUX_CAPTURE_COMMAND, runner)
-    _gsettings_set(target_schema, "binding", shortcut_to_gsettings_binding(resolved), runner)
+    capture_command = _resolve_capture_command()
+    name_set = _gsettings_set(target_schema, "name", SCREENUX_SHORTCUT_NAME, runner)
+    command_set = _gsettings_set(target_schema, "command", capture_command, runner)
+    binding_value = shortcut_to_gsettings_binding(resolved)
+    binding_set = _gsettings_set(target_schema, "binding", binding_value, runner)
+    _log_telemetry(
+        "register.persisted",
+        binding=binding_value,
+        command=capture_command,
+        command_set=command_set,
+        name_set=name_set,
+        path=target_path,
+        resolved=resolved,
+        binding_set=binding_set,
+    )
     return HotkeyRegistrationResult(resolved, warning)
 
 

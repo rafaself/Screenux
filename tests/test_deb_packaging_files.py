@@ -10,6 +10,7 @@ BUILD_SCRIPT = ROOT / "scripts" / "build_deb.sh"
 HOOKS_DIR = ROOT / "packaging" / "pyinstaller_hooks"
 GTK_HOOK = HOOKS_DIR / "hook-gi.repository.Gtk.py"
 GDK_HOOK = HOOKS_DIR / "hook-gi.repository.Gdk.py"
+APP_ID = "io.github.rafa.ScreenuxScreenshot"
 
 
 def _write_executable(path: Path, content: str) -> None:
@@ -21,7 +22,7 @@ class DebianPackagingTests(unittest.TestCase):
     def test_desktop_entry_exists_and_declares_expected_fields(self):
         content = DESKTOP_FILE.read_text(encoding="utf-8")
         self.assertIn("Exec=screenux-screenshot", content)
-        self.assertIn("Icon=screenux-screenshot", content)
+        self.assertIn(f"Icon={APP_ID}", content)
         self.assertIn("Type=Application", content)
         self.assertIn("Categories=Utility;Graphics;", content)
 
