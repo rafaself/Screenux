@@ -319,6 +319,29 @@ def collect_gnome_taken_shortcuts(runner: Runner = _default_runner, exclude_path
     return taken
 
 
+def _native_shortcut_conflicts(shortcut: str, runner: Runner) -> list[tuple[str, str]]:
+    conflicts: list[tuple[str, str]] = []
+    for schema, key in _NATIVE_SHORTCUT_KEYS:
+        if not _schema_exists(schema, runner):
+            continue
+        parsed = parse_gsettings_binding(_gsettings_get(schema, key, runner) or "")
+        if parsed == shortcut:
+            conflicts.append((schema, key))
+    return conflicts
+
+
+def _clear_native_shortcut_conflicts(conflicts: list[tuple[str, str]], runner: Runner) -> tuple[list[str], list[str]]:
+    cleared: list[str] = []
+    failed: list[str] = []
+    for schema, key in conflicts:
+        target = f"{schema}:{key}"
+        if _gsettings_set(schema, key, "[]", runner):
+            cleared.append(target)
+        else:
+            failed.append(target)
+    return cleared, failed
+
+
 def _remove_screenux_shortcut(paths: list[str], runner: Runner) -> None:
     screenux_path = _find_screenux_custom_path(paths, runner)
     if screenux_path is None:
@@ -360,6 +383,28 @@ def register_gnome_shortcut(
     preferred = normalize_shortcut(shortcut)
     taken = collect_gnome_taken_shortcuts(runner=runner, exclude_path=screenux_path)
     resolved, warning = resolve_shortcut_with_fallback(preferred, lambda candidate: candidate in taken)
+    if resolved != preferred:
+        conflicts = _native_shortcut_conflicts(preferred, runner)
+        if conflicts:
+            cleared, failed = _clear_native_shortcut_conflicts(conflicts, runner)
+            _log_telemetry(
+                "register.reclaim",
+                preferred=preferred,
+                conflicts=[f"{schema}:{key}" for schema, key in conflicts],
+                cleared=cleared,
+                failed=failed,
+            )
+            if cleared:
+                refreshed_taken = collect_gnome_taken_shortcuts(runner=runner, exclude_path=screenux_path)
+                if preferred not in refreshed_taken:
+                    resolved = preferred
+                    if failed:
+                        warning = (
+                            f"Reclaimed {preferred} by disabling native binding(s): "
+                            f"{', '.join(cleared)}. Some bindings could not be changed: {', '.join(failed)}."
+                        )
+                    else:
+                        warning = None
     _log_telemetry("register.resolve", preferred=preferred, resolved=resolved, warning=warning)
 
     if resolved is None:
